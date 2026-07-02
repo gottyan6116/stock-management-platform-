@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #f7f9fc;
+  --surface: #ffffff;
+  --surface-subtle: #f8fafc;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  --primary: #155eef;
+  --primary-hover: #0b4dd8;
+  --primary-soft: #eaf2ff;
+
+  --success: #15803d;
+  --success-soft: #ecfdf3;
+
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+
+  --warning: #d97706;
+  --warning-soft: #fffbeb;
+
+  --focus: #2563eb;
+}
+
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--text-primary);
+  }
+
+  * {
+    border-color: var(--border);
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
