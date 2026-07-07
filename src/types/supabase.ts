@@ -215,6 +215,75 @@ export interface Database {
           },
         ];
       };
+      simulation_accounts: {
+        Row: {
+          user_id: string;
+          cash_balance_jpy: number;
+          cash_balance_usd: number;
+          initial_balance_jpy: number;
+          initial_balance_usd: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["simulation_accounts"]["Row"]> &
+          Pick<Database["public"]["Tables"]["simulation_accounts"]["Row"], "user_id">;
+        Update: Partial<Database["public"]["Tables"]["simulation_accounts"]["Row"]>;
+        Relationships: Relationship[];
+      };
+      simulation_holdings: {
+        Row: {
+          id: string;
+          user_id: string;
+          instrument_id: string;
+          quantity: number;
+          avg_cost: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["simulation_holdings"]["Row"]> &
+          Pick<
+            Database["public"]["Tables"]["simulation_holdings"]["Row"],
+            "user_id" | "instrument_id" | "quantity" | "avg_cost"
+          >;
+        Update: Partial<Database["public"]["Tables"]["simulation_holdings"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "simulation_holdings_instrument_id_fkey";
+            columns: ["instrument_id"];
+            isOneToOne: false;
+            referencedRelation: "instruments";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      simulation_trades: {
+        Row: {
+          id: string;
+          user_id: string;
+          instrument_id: string;
+          side: "buy" | "sell";
+          quantity: number;
+          price: number;
+          currency: "JPY" | "USD";
+          realized_pnl: number | null;
+          executed_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["simulation_trades"]["Row"]> &
+          Pick<
+            Database["public"]["Tables"]["simulation_trades"]["Row"],
+            "user_id" | "instrument_id" | "side" | "quantity" | "price" | "currency"
+          >;
+        Update: Partial<Database["public"]["Tables"]["simulation_trades"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "simulation_trades_instrument_id_fkey";
+            columns: ["instrument_id"];
+            isOneToOne: false;
+            referencedRelation: "instruments";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

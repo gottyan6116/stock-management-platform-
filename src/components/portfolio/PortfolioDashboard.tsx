@@ -11,7 +11,7 @@ import { PercentChange } from "@/components/tables/PercentChange";
 import { CurrencyValue } from "@/components/tables/CurrencyValue";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { SymbolCombobox } from "@/components/search/SymbolCombobox";
-import { formatCurrency } from "@/lib/utils/format";
+import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
 type NisaType = "tsumitate" | "growth" | null;
@@ -184,6 +184,12 @@ export function PortfolioDashboard() {
     return acc;
   }, {});
 
+  const totalCostBasisByCurrency = filtered.reduce<Record<string, number>>((acc, p) => {
+    if (p.costBasis === null) return acc;
+    acc[p.currency] = (acc[p.currency] ?? 0) + p.costBasis;
+    return acc;
+  }, {});
+
   return (
     <div className="flex flex-col gap-6">
       <div role="tablist" aria-label="ポートフォリオの表示切替" className="inline-flex flex-wrap gap-1 rounded-button border border-border bg-surface-subtle p-0.5">
@@ -218,18 +224,33 @@ export function PortfolioDashboard() {
           </MetricValue>
         </MetricCard>
         <MetricCard label="評価損益合計（概算）">
-          <MetricValue>
-            {Object.entries(totalPnlByCurrency).length === 0
-              ? "—"
-              : Object.entries(totalPnlByCurrency)
-                  .map(([currency, value]) => formatCurrency(value, currency as Currency))
-                  .join(" + ")}
-          </MetricValue>
+          {Object.entries(totalPnlByCurrency).length === 0 ? (
+            <MetricValue>—</MetricValue>
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              {Object.entries(totalPnlByCurrency).map(([currency, value]) => {
+                const costBasis = totalCostBasisByCurrency[currency] ?? 0;
+                const percent = costBasis !== 0 ? (value / costBasis) * 100 : null;
+                const isUp = value > 0;
+                const isDown = value < 0;
+                const colorClass = isUp ? "text-success" : isDown ? "text-danger" : "text-text-primary";
+                return (
+                  <p key={currency} className={cn("text-lg font-bold tabular-nums 2xl:text-[26px]", colorClass)}>
+                    {value > 0 ? "+" : ""}
+                    {formatCurrency(value, currency as Currency)}
+                    {percent !== null ? (
+                      <span className="ml-1 text-sm font-semibold 2xl:text-base">({formatPercent(percent)})</span>
+                    ) : null}
+                  </p>
+                );
+              })}
+            </div>
+          )}
         </MetricCard>
       </div>
 
       <div className="rounded-card border border-border bg-surface p-5">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <p className="text-lg font-bold text-text-primary">保有銘柄を追加</p>
           <div role="group" aria-label="登録方法切替" className="inline-flex rounded-button border border-border p-0.5">
             <button
@@ -367,7 +388,8 @@ export function PortfolioDashboard() {
           description="上のフォームから銘柄コード・保有数量を入力して追加してください"
         />
       ) : (
-        <div className="overflow-x-auto rounded-card border border-border bg-surface">
+        <>
+        <div className="hidden overflow-x-auto rounded-card border border-border bg-surface md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs font-semibold text-text-muted">
@@ -461,6 +483,81 @@ export function PortfolioDashboard() {
             </tbody>
           </table>
         </div>
+
+        <div className="flex flex-col gap-3 md:hidden">
+          {filtered.map((p) => (
+            <div
+              key={p.id}
+              onClick={() => {
+                if (!p.isManual) router.push(`/stocks/${encodeURIComponent(p.providerSymbol)}`);
+              }}
+              role={p.isManual ? undefined : "button"}
+              tabIndex={p.isManual ? undefined : 0}
+              className={cn(
+                "flex flex-col gap-2 rounded-card border border-border bg-surface p-4",
+                !p.isManual && "cursor-pointer"
+              )}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-text-primary">{p.name}</p>
+                  <p className="truncate text-xs text-text-muted">
+                    {p.isManual ? "投資信託（手入力）" : `${p.displaySymbol} · ${p.exchange ?? "—"}`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeMutation.mutate(p.id);
+                  }}
+                  aria-label="削除"
+                  className="shrink-0 rounded-sm p-1.5 text-text-muted hover:bg-danger-soft hover:text-danger"
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <MarketBadge market={p.market} />
+                {p.nisaType ? (
+                  <span className="text-[11px] font-semibold text-primary">{NISA_LABEL[p.nisaType]}</span>
+                ) : null}
+                <span className="text-xs text-text-muted">
+                  {p.quantity.toLocaleString()}
+                  {p.instrumentType === "fund" ? "口" : "株"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <p className="text-[11px] text-text-muted">最新終値/基準価額</p>
+                  <CurrencyValue value={p.lastClose} currency={p.currency} />
+                </div>
+                <div>
+                  <p className="text-[11px] text-text-muted">前営業日比</p>
+                  <PercentChange amount={p.change} percent={p.changePercent} />
+                </div>
+                <div>
+                  <p className="text-[11px] text-text-muted">評価額</p>
+                  <CurrencyValue value={p.marketValue} currency={p.currency} />
+                </div>
+                <div>
+                  <p className="text-[11px] text-text-muted">評価損益</p>
+                  {p.unrealizedPnl === null ? (
+                    <span className="text-text-muted">—</span>
+                  ) : (
+                    <PercentChange
+                      amount={p.unrealizedPnl}
+                      percent={p.costBasis && p.costBasis !== 0 ? (p.unrealizedPnl / p.costBasis) * 100 : null}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        </>
       )}
     </div>
   );

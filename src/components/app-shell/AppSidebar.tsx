@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Briefcase, Globe2, Landmark, LineChart, PiggyBank, Star } from "lucide-react";
+import { Briefcase, Globe2, Landmark, LineChart, PiggyBank, Star, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { UserMenu } from "./UserMenu";
 
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: "/japan", label: "日本株", icon: Landmark },
   { href: "/us", label: "米国株", icon: Globe2 },
   { href: "/funds", label: "投資信託", icon: PiggyBank },
+  { href: "/simulation", label: "シミュレーション", icon: TrendingUp },
 ] as const;
 
 export function AppSidebar({ email }: { email: string }) {
