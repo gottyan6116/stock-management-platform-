@@ -43,7 +43,7 @@ export function FavoritesDashboard() {
   if (isLoading) {
     return (
       <div className="flex flex-col gap-6">
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 2xl:gap-4">
           <CardSkeleton />
           <CardSkeleton />
           <CardSkeleton />
@@ -75,7 +75,7 @@ export function FavoritesDashboard() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 2xl:gap-4">
         <MetricCard label="お気に入り銘柄">
           <MetricValue>{favoriteStocks.length}銘柄</MetricValue>
           <MetricDelta>

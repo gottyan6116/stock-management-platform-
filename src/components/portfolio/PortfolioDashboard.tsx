@@ -10,6 +10,7 @@ import { MarketBadge } from "@/components/tables/MarketBadge";
 import { PercentChange } from "@/components/tables/PercentChange";
 import { CurrencyValue } from "@/components/tables/CurrencyValue";
 import { EmptyState } from "@/components/feedback/EmptyState";
+import { SymbolCombobox } from "@/components/search/SymbolCombobox";
 import { formatCurrency } from "@/lib/utils/format";
 
 interface PositionApiItem {
@@ -118,7 +119,7 @@ export function PortfolioDashboard() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 2xl:gap-4">
         <MetricCard label="保有銘柄数">
           <MetricValue>{positions.length}銘柄</MetricValue>
         </MetricCard>
@@ -147,15 +148,9 @@ export function PortfolioDashboard() {
         <form onSubmit={handleSubmit} className="flex flex-col gap-3 md:flex-row md:items-end">
           <div className="flex flex-1 flex-col gap-1">
             <label htmlFor="position-symbol" className="text-xs font-semibold text-text-secondary">
-              銘柄コード（例: 7203.T, AAPL）
+              銘柄コードまたは銘柄名（例: 7203.T, AAPL, トヨタ）
             </label>
-            <input
-              id="position-symbol"
-              value={symbol}
-              onChange={(e) => setSymbol(e.target.value)}
-              placeholder="AAPL"
-              className="rounded-button border border-border px-3 py-2 text-sm outline-none focus-visible:border-focus"
-            />
+            <SymbolCombobox id="position-symbol" value={symbol} onChange={setSymbol} placeholder="AAPL" />
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="position-quantity" className="text-xs font-semibold text-text-secondary">

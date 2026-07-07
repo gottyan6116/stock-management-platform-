@@ -64,7 +64,7 @@ export function MarketPageDashboard({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 2xl:gap-4">
         <MetricCard label={`${index.name} 最新終値`}>
           <MetricValue>
             <CurrencyValue value={index.quote.close} currency={market === "JP" ? "JPY" : "USD"} />
