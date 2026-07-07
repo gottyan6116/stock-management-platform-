@@ -13,6 +13,7 @@ import { CurrencyValue } from "@/components/tables/CurrencyValue";
 import { PercentChange } from "@/components/tables/PercentChange";
 import { formatDate, formatDateTime, formatPercent } from "@/lib/utils/format";
 import type { Instrument, Quote } from "@/types/domain";
+import { TableSkeleton } from "@/components/feedback/Skeleton";
 
 interface MarketIndexInfo {
   name: string;
@@ -33,7 +34,7 @@ export function MarketPageDashboard({
   overviewRows: { label: string; value: string }[];
   featuredSymbols: WatchlistEntry[];
 }) {
-  const { favoriteInstruments } = useFavorites();
+  const { favoriteInstruments, isLoading } = useFavorites();
 
   const marketFavoriteInstruments = useMemo(
     () => favoriteInstruments.filter((i) => i.market === market),
@@ -76,10 +77,10 @@ export function MarketPageDashboard({
           </MetricValue>
         </MetricCard>
         <MetricCard label={`${marketLabel}お気に入り数`}>
-          <MetricValue>{favoriteStocks.length}銘柄</MetricValue>
+          <MetricValue>{isLoading ? "—" : `${favoriteStocks.length}銘柄`}</MetricValue>
         </MetricCard>
         <MetricCard label={`${marketLabel}お気に入り 1年騰落率平均`} tooltip={`対象${returns1y.length}銘柄`}>
-          <MetricValue>{formatPercent(avgReturn1y)}</MetricValue>
+          <MetricValue>{isLoading ? "—" : formatPercent(avgReturn1y)}</MetricValue>
         </MetricCard>
       </div>
 
@@ -103,19 +104,25 @@ export function MarketPageDashboard({
         </div>
       </div>
 
-      {favoriteStocks.length > 0 ? (
-        <div>
-          <p className="mb-3 text-lg font-bold text-text-primary">{marketLabel}のお気に入り</p>
-          <StockTable stocks={favoriteStocks} />
-        </div>
-      ) : null}
+      {isLoading ? (
+        <TableSkeleton />
+      ) : (
+        <>
+          {favoriteStocks.length > 0 ? (
+            <div>
+              <p className="mb-3 text-lg font-bold text-text-primary">{marketLabel}のお気に入り</p>
+              <StockTable stocks={favoriteStocks} />
+            </div>
+          ) : null}
 
-      {featuredStocks.length > 0 ? (
-        <div>
-          <p className="mb-3 text-lg font-bold text-text-primary">{marketLabel}の注目銘柄</p>
-          <StockTable stocks={featuredStocks} />
-        </div>
-      ) : null}
+          {featuredStocks.length > 0 ? (
+            <div>
+              <p className="mb-3 text-lg font-bold text-text-primary">{marketLabel}の注目銘柄</p>
+              <StockTable stocks={featuredStocks} />
+            </div>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

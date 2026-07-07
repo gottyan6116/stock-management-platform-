@@ -10,12 +10,13 @@ import { MarketRatioDonut } from "@/components/charts/MarketRatioDonut";
 import { BasketIndexChart } from "@/components/charts/BasketIndexChart";
 import { StockTable } from "@/components/tables/StockTable";
 import { EmptyState } from "@/components/feedback/EmptyState";
+import { CardSkeleton, TableSkeleton } from "@/components/feedback/Skeleton";
 import { formatPercent } from "@/lib/utils/format";
 
 const FAVORITED_AT_FALLBACK = new Date().toISOString();
 
 export function FavoritesDashboard() {
-  const { favoriteInstruments } = useFavorites();
+  const { favoriteInstruments, isLoading } = useFavorites();
 
   const favoriteStocks = useMemo(
     () => favoriteInstruments.map((instrument) => buildMockFavoriteStock(instrument, FAVORITED_AT_FALLBACK)),
@@ -38,6 +39,20 @@ export function FavoritesDashboard() {
     const seriesList = favoriteInstruments.map((i) => buildMockDailySeriesFor(i, 260 * 3));
     return computeFavoriteBasketIndex(seriesList);
   }, [favoriteInstruments]);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
+        <TableSkeleton />
+      </div>
+    );
+  }
 
   if (favoriteStocks.length === 0) {
     return (

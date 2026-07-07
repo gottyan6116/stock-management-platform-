@@ -3,7 +3,6 @@
 import { Star } from "lucide-react";
 import type { Instrument } from "@/types/domain";
 import { useFavorites } from "@/features/favorites/FavoritesProvider";
-import { useToast } from "@/components/feedback/ToastProvider";
 import { cn } from "@/lib/utils/cn";
 
 export function FavoriteToggle({
@@ -14,7 +13,6 @@ export function FavoriteToggle({
   size?: "sm" | "md";
 }) {
   const { isFavorite, addFavorite, removeFavorite } = useFavorites();
-  const { showToast } = useToast();
   const active = isFavorite(instrument.providerSymbol);
 
   function handleClick(e: React.MouseEvent) {
@@ -23,14 +21,8 @@ export function FavoriteToggle({
 
     if (active) {
       removeFavorite(instrument.providerSymbol);
-      showToast({
-        message: `${instrument.name} をお気に入りから解除しました`,
-        actionLabel: "元に戻す",
-        onAction: () => addFavorite(instrument),
-      });
     } else {
       addFavorite(instrument);
-      showToast({ message: "お気に入りに追加しました" }, 2500);
     }
   }
 

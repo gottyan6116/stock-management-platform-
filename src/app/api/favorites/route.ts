@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
   const parsed = postSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return apiError("INVALID_REQUEST");
 
-  const instrument = await resolveOrCreateInstrument(supabase, parsed.data.providerSymbol).catch(
+  const instrument = await resolveOrCreateInstrument(parsed.data.providerSymbol).catch(
     () => null
   );
   if (!instrument) return apiError("NOT_FOUND", "指定された銘柄が見つかりませんでした。");

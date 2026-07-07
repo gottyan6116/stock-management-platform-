@@ -6,9 +6,10 @@ import { useFavorites } from "@/features/favorites/FavoritesProvider";
 import { buildMockFavoriteStock } from "@/lib/mock/favorite-stocks";
 import { StockTable } from "@/components/tables/StockTable";
 import { EmptyState } from "@/components/feedback/EmptyState";
+import { TableSkeleton } from "@/components/feedback/Skeleton";
 
 export function FundsDashboard() {
-  const { favoriteInstruments } = useFavorites();
+  const { favoriteInstruments, isLoading } = useFavorites();
 
   const fundInstruments = useMemo(
     () => favoriteInstruments.filter((i) => i.instrumentType === "fund"),
@@ -19,6 +20,10 @@ export function FundsDashboard() {
     () => fundInstruments.map((i) => buildMockFavoriteStock(i, new Date().toISOString())),
     [fundInstruments]
   );
+
+  if (isLoading) {
+    return <TableSkeleton />;
+  }
 
   if (fundStocks.length === 0) {
     return (
