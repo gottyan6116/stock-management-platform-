@@ -14,7 +14,11 @@ export async function searchYahoo(query: string, market?: Market): Promise<Instr
 
   const result = await withRetry(() =>
     withTimeout(
-      client.search(query, { quotesCount: 15, newsCount: 0 }) as Promise<YahooSearchResponse>
+      client.search(query, {
+        quotesCount: 15,
+        newsCount: 0,
+        enableFuzzyQuery: true,
+      }) as Promise<YahooSearchResponse>
     )
   );
 

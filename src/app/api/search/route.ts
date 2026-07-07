@@ -7,6 +7,7 @@ import { getMarketDataProvider } from "@/lib/market-data/get-provider";
 import { dedupeSearchResults } from "@/lib/market-data/normalize";
 import type { InstrumentSearchResult } from "@/lib/market-data/provider";
 import { apiError } from "@/lib/errors/api-error";
+import { findAliasedSymbols } from "@/config/company-aliases";
 
 const querySchema = z.object({
   q: z.string().trim().default(""),
@@ -63,11 +64,23 @@ export async function GET(request: NextRequest) {
   let providerError = false;
 
   if (q.length >= 2 && localResults.length < LOCAL_RESULT_THRESHOLD) {
+    const provider = getMarketDataProvider();
+
+    // 日本語の通称・カタカナ社名（例:「ジョンソンアンドジョンソン」）はYahoo Financeの
+    // テキスト検索では解決できないため、別名辞書から該当symbolを直接引く。
+    const aliasedSymbols = findAliasedSymbols(q);
+    const aliasResults = await Promise.all(
+      aliasedSymbols.map((symbol) => provider.getInstrumentInfo(symbol).catch(() => null))
+    );
+    const resolvedAliasResults = aliasResults.filter(
+      (r): r is InstrumentSearchResult => r !== null && (!market || r.market === market)
+    );
+
     try {
-      const provider = getMarketDataProvider();
-      providerResults = await provider.search(q, market);
+      providerResults = [...resolvedAliasResults, ...(await provider.search(q, market))];
     } catch {
-      providerError = true;
+      providerResults = resolvedAliasResults;
+      providerError = resolvedAliasResults.length === 0;
     }
   }
 
