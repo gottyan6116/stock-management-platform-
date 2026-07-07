@@ -117,4 +117,8 @@ export class MockMarketDataProvider implements MarketDataProvider {
     const series = FIXTURE_DAILY_PRICES[symbol] ?? [];
     return series.filter((row) => row.tradingDate >= from && row.tradingDate <= to);
   }
+
+  async getInstrumentInfo(symbol: string): Promise<InstrumentSearchResult | null> {
+    return FIXTURE_INSTRUMENTS.find((i) => i.providerSymbol === symbol) ?? null;
+  }
 }

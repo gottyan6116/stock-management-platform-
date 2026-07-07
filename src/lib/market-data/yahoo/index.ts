@@ -2,7 +2,7 @@ import "server-only";
 import type { Market } from "@/types/domain";
 import type { MarketDataProvider } from "../provider";
 import { searchYahoo } from "./search";
-import { getYahooQuote } from "./quote";
+import { getYahooInstrumentInfo, getYahooQuote } from "./quote";
 import { getYahooDailyPrices } from "./chart";
 
 export class YahooMarketDataProvider implements MarketDataProvider {
@@ -16,5 +16,9 @@ export class YahooMarketDataProvider implements MarketDataProvider {
 
   getDailyPrices(symbol: string, from: string, to: string) {
     return getYahooDailyPrices(symbol, from, to);
+  }
+
+  getInstrumentInfo(symbol: string) {
+    return getYahooInstrumentInfo(symbol);
   }
 }

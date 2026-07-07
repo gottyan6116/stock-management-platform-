@@ -68,6 +68,44 @@ interface YahooQuoteLike {
   marketCap?: unknown;
   trailingPE?: unknown;
   forwardPE?: unknown;
+  shortName?: unknown;
+  longName?: unknown;
+  exchange?: unknown;
+  fullExchangeName?: unknown;
+  quoteType?: unknown;
+}
+
+/** お気に入り初回追加時、正確なsymbolでinstrument種別・名称・取引所を解決する（検索とは別経路）。 */
+export function mapYahooQuoteToInstrumentInfo(quote: YahooQuoteLike): InstrumentSearchResult | null {
+  if (typeof quote.symbol !== "string" || typeof quote.quoteType !== "string") return null;
+
+  const instrumentType = toInstrumentType(quote.quoteType);
+  if (!instrumentType || !SUPPORTED_QUOTE_TYPES.has(quote.quoteType)) return null;
+
+  const providerSymbol = normalizeProviderSymbol(quote.symbol);
+  const market = detectMarketFromProviderSymbol(providerSymbol);
+  if (market !== "JP" && market !== "US") return null;
+
+  const name =
+    (typeof quote.longName === "string" && quote.longName) ||
+    (typeof quote.shortName === "string" && quote.shortName) ||
+    "";
+  if (!name) return null;
+
+  const exchange =
+    (typeof quote.fullExchangeName === "string" && quote.fullExchangeName) ||
+    (typeof quote.exchange === "string" && quote.exchange) ||
+    null;
+
+  return {
+    providerSymbol,
+    displaySymbol: toDisplaySymbol(providerSymbol),
+    name,
+    exchange,
+    market,
+    currency: market === "JP" ? "JPY" : "USD",
+    instrumentType,
+  };
 }
 
 function toNullableNumber(value: unknown): number | null {
