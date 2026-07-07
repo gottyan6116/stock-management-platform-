@@ -48,6 +48,10 @@ export interface Database {
           instrument_id: string;
           quantity: number;
           avg_cost: number | null;
+          nisa_type: "tsumitate" | "growth" | null;
+          is_manual: boolean;
+          manual_unit_price: number | null;
+          manual_price_date: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -57,6 +61,10 @@ export interface Database {
           instrument_id: string;
           quantity: number;
           avg_cost?: number | null;
+          nisa_type?: "tsumitate" | "growth" | null;
+          is_manual?: boolean;
+          manual_unit_price?: number | null;
+          manual_price_date?: string | null;
           created_at?: string;
           updated_at?: string;
         };

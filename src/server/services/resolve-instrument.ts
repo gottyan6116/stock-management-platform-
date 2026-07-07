@@ -41,3 +41,36 @@ export async function resolveOrCreateInstrument(
     instrument_type: info.instrumentType,
   });
 }
+
+function slugifyFundName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+/**
+ * Yahoo Financeにシンボルが存在しない日本の投資信託（NISA等）を手入力で登録するための解決関数。
+ * provider="manual" として、名前から生成した安定シンボルでinstrumentsをupsertする。
+ * 同じ名前を再度入力した場合は同一instrumentを再利用する（名前を正規化キーとして扱う）。
+ */
+export async function resolveOrCreateManualFundInstrument(name: string): Promise<InstrumentRow> {
+  const serviceClient = createServiceRoleClient();
+  const providerSymbol = `MANUAL:${slugifyFundName(name)}`;
+
+  const existing = await findInstrumentByProviderSymbol(serviceClient, providerSymbol, "manual");
+  if (existing) return existing;
+
+  return upsertInstrument(serviceClient, {
+    provider: "manual",
+    provider_symbol: providerSymbol,
+    display_symbol: name,
+    name,
+    exchange: null,
+    market: "JP",
+    currency: "JPY",
+    instrument_type: "fund",
+  });
+}

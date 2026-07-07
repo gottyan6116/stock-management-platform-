@@ -2,9 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { listPositions, upsertPosition } from "@/server/repositories/positions-repository";
-import { resolveOrCreateInstrument } from "@/server/services/resolve-instrument";
+import { addFavorite } from "@/server/repositories/favorites-repository";
+import {
+  resolveOrCreateInstrument,
+  resolveOrCreateManualFundInstrument,
+} from "@/server/services/resolve-instrument";
 import { getMarketDataProvider } from "@/lib/market-data/get-provider";
 import { apiError } from "@/lib/errors/api-error";
+
+// 投資信託(口数ベース)の基準価額は「10,000口あたり」の慣行で表示される。
+const FUND_UNIT_DIVISOR = 10000;
 
 export async function GET() {
   const supabase = createClient();
@@ -19,12 +26,38 @@ export async function GET() {
 
     const data = await Promise.all(
       positions.map(async (position) => {
+        const isFundUnitBased = position.isManual && position.instrument.instrument_type === "fund";
+
+        if (isFundUnitBased) {
+          const lastClose = position.manualUnitPrice !== null ? position.manualUnitPrice / FUND_UNIT_DIVISOR : null;
+          return {
+            id: position.id,
+            quantity: position.quantity,
+            avgCost: position.avgCost !== null ? position.avgCost / FUND_UNIT_DIVISOR : null,
+            nisaType: position.nisaType,
+            isManual: true,
+            providerSymbol: position.instrument.provider_symbol,
+            displaySymbol: position.instrument.display_symbol,
+            name: position.instrument.name,
+            exchange: position.instrument.exchange,
+            market: position.instrument.market,
+            currency: position.instrument.currency,
+            instrumentType: position.instrument.instrument_type,
+            priceDate: position.manualPriceDate,
+            fetchedAt: position.manualPriceDate,
+            lastClose,
+            change: null,
+            changePercent: null,
+          };
+        }
+
         const quote = await provider.getQuote(position.instrument.provider_symbol).catch(() => null);
         return {
           id: position.id,
           quantity: position.quantity,
           avgCost: position.avgCost,
-          createdAt: position.createdAt,
+          nisaType: position.nisaType,
+          isManual: position.isManual,
           providerSymbol: position.instrument.provider_symbol,
           displaySymbol: position.instrument.display_symbol,
           name: position.instrument.name,
@@ -47,11 +80,18 @@ export async function GET() {
   }
 }
 
-const postSchema = z.object({
-  providerSymbol: z.string().trim().min(1),
-  quantity: z.coerce.number().positive(),
-  avgCost: z.coerce.number().nonnegative().optional(),
-});
+const postSchema = z
+  .object({
+    providerSymbol: z.string().trim().min(1).optional(),
+    manualName: z.string().trim().min(1).optional(),
+    manualUnitPrice: z.coerce.number().nonnegative().optional(),
+    quantity: z.coerce.number().positive(),
+    avgCost: z.coerce.number().nonnegative().optional(),
+    nisaType: z.enum(["tsumitate", "growth"]).optional(),
+  })
+  .refine((data) => Boolean(data.providerSymbol) || Boolean(data.manualName), {
+    message: "providerSymbolまたはmanualNameのいずれかが必要です。",
+  });
 
 export async function POST(request: NextRequest) {
   const supabase = createClient();
@@ -63,19 +103,31 @@ export async function POST(request: NextRequest) {
   const parsed = postSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return apiError("INVALID_REQUEST", parsed.error.issues[0]?.message);
 
-  const instrument = await resolveOrCreateInstrument(parsed.data.providerSymbol).catch(
-    () => null
-  );
+  const isManual = Boolean(parsed.data.manualName);
+
+  const instrument = isManual
+    ? await resolveOrCreateManualFundInstrument(parsed.data.manualName!).catch(() => null)
+    : await resolveOrCreateInstrument(parsed.data.providerSymbol!).catch(() => null);
   if (!instrument) return apiError("NOT_FOUND", "指定された銘柄が見つかりませんでした。");
 
   try {
-    const position = await upsertPosition(
-      supabase,
-      user.id,
-      instrument.id,
-      parsed.data.quantity,
-      parsed.data.avgCost ?? null
-    );
+    const position = await upsertPosition(supabase, {
+      userId: user.id,
+      instrumentId: instrument.id,
+      quantity: parsed.data.quantity,
+      avgCost: parsed.data.avgCost ?? null,
+      nisaType: parsed.data.nisaType ?? null,
+      isManual,
+      manualUnitPrice: parsed.data.manualUnitPrice ?? null,
+    });
+
+    // 手入力ファンドは投資信託ページにも表示されるよう、お気に入りにも自動登録する。
+    if (isManual) {
+      await addFavorite(supabase, user.id, instrument.id).catch((error: { code?: string }) => {
+        if (error.code !== "23505") throw error;
+      });
+    }
+
     return NextResponse.json({ data: position });
   } catch {
     return apiError("INTERNAL_ERROR");

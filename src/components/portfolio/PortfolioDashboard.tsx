@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Briefcase, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -12,11 +12,30 @@ import { CurrencyValue } from "@/components/tables/CurrencyValue";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { SymbolCombobox } from "@/components/search/SymbolCombobox";
 import { formatCurrency } from "@/lib/utils/format";
+import { cn } from "@/lib/utils/cn";
+
+type NisaType = "tsumitate" | "growth" | null;
+type Tab = "all" | "tsumitate" | "growth" | "US" | "JP";
+
+const TABS: { value: Tab; label: string }[] = [
+  { value: "all", label: "すべて" },
+  { value: "tsumitate", label: "積立NISA" },
+  { value: "growth", label: "成長投資枠" },
+  { value: "US", label: "米国株" },
+  { value: "JP", label: "日本株" },
+];
+
+const NISA_LABEL: Record<Exclude<NisaType, null>, string> = {
+  tsumitate: "積立NISA",
+  growth: "成長投資枠",
+};
 
 interface PositionApiItem {
   id: string;
   quantity: number;
   avgCost: number | null;
+  nisaType: NisaType;
+  isManual: boolean;
   providerSymbol: string;
   displaySymbol: string;
   name: string;
@@ -37,14 +56,26 @@ async function fetchPositions(): Promise<PositionApiItem[]> {
   return json.data;
 }
 
-async function addPosition(input: { providerSymbol: string; quantity: number; avgCost: string }) {
+interface AddPositionInput {
+  providerSymbol?: string;
+  manualName?: string;
+  manualUnitPrice?: string;
+  quantity: number;
+  avgCost: string;
+  nisaType: NisaType;
+}
+
+async function addPosition(input: AddPositionInput) {
   const res = await fetch("/api/positions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       providerSymbol: input.providerSymbol,
+      manualName: input.manualName,
+      manualUnitPrice: input.manualUnitPrice === "" ? undefined : Number(input.manualUnitPrice),
       quantity: input.quantity,
       avgCost: input.avgCost === "" ? undefined : Number(input.avgCost),
+      nisaType: input.nisaType ?? undefined,
     }),
   });
   if (!res.ok) {
@@ -64,19 +95,27 @@ export function PortfolioDashboard() {
   const queryClient = useQueryClient();
   const router = useRouter();
   const { data, isLoading } = useQuery({ queryKey: POSITIONS_KEY, queryFn: fetchPositions });
-  const positions = data ?? [];
+  const positions = useMemo(() => data ?? [], [data]);
 
+  const [tab, setTab] = useState<Tab>("all");
+  const [isManualMode, setIsManualMode] = useState(false);
   const [symbol, setSymbol] = useState("");
+  const [manualName, setManualName] = useState("");
+  const [manualUnitPrice, setManualUnitPrice] = useState("");
   const [quantity, setQuantity] = useState("");
   const [avgCost, setAvgCost] = useState("");
+  const [nisaType, setNisaType] = useState<NisaType>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   const addMutation = useMutation({
     mutationFn: addPosition,
     onSuccess: () => {
       setSymbol("");
+      setManualName("");
+      setManualUnitPrice("");
       setQuantity("");
       setAvgCost("");
+      setNisaType(null);
       setFormError(null);
       queryClient.invalidateQueries({ queryKey: POSITIONS_KEY });
     },
@@ -91,27 +130,55 @@ export function PortfolioDashboard() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const quantityNum = Number(quantity);
-    if (!symbol.trim() || !Number.isFinite(quantityNum) || quantityNum <= 0) {
-      setFormError("銘柄コードと保有数量（正の数）を入力してください。");
+    if (!Number.isFinite(quantityNum) || quantityNum <= 0) {
+      setFormError("保有数量（正の数）を入力してください。");
       return;
     }
-    addMutation.mutate({ providerSymbol: symbol.trim(), quantity: quantityNum, avgCost });
+    if (isManualMode) {
+      if (!manualName.trim() || manualUnitPrice === "") {
+        setFormError("ファンド名と基準価額を入力してください。");
+        return;
+      }
+      addMutation.mutate({
+        manualName: manualName.trim(),
+        manualUnitPrice,
+        quantity: quantityNum,
+        avgCost,
+        nisaType,
+      });
+    } else {
+      if (!symbol.trim()) {
+        setFormError("銘柄コードを入力してください。");
+        return;
+      }
+      addMutation.mutate({ providerSymbol: symbol.trim(), quantity: quantityNum, avgCost, nisaType });
+    }
   }
 
-  const evaluated = positions.map((p) => {
-    const marketValue = p.lastClose !== null ? p.lastClose * p.quantity : null;
-    const costBasis = p.avgCost !== null ? p.avgCost * p.quantity : null;
-    const unrealizedPnl = marketValue !== null && costBasis !== null ? marketValue - costBasis : null;
-    return { ...p, marketValue, costBasis, unrealizedPnl };
-  });
+  const evaluated = useMemo(
+    () =>
+      positions.map((p) => {
+        const marketValue = p.lastClose !== null ? p.lastClose * p.quantity : null;
+        const costBasis = p.avgCost !== null ? p.avgCost * p.quantity : null;
+        const unrealizedPnl = marketValue !== null && costBasis !== null ? marketValue - costBasis : null;
+        return { ...p, marketValue, costBasis, unrealizedPnl };
+      }),
+    [positions]
+  );
 
-  const totalMarketValueByCurrency = evaluated.reduce<Record<string, number>>((acc, p) => {
+  const filtered = useMemo(() => {
+    if (tab === "all") return evaluated;
+    if (tab === "tsumitate" || tab === "growth") return evaluated.filter((p) => p.nisaType === tab);
+    return evaluated.filter((p) => p.market === tab);
+  }, [evaluated, tab]);
+
+  const totalMarketValueByCurrency = filtered.reduce<Record<string, number>>((acc, p) => {
     if (p.marketValue === null) return acc;
     acc[p.currency] = (acc[p.currency] ?? 0) + p.marketValue;
     return acc;
   }, {});
 
-  const totalPnlByCurrency = evaluated.reduce<Record<string, number>>((acc, p) => {
+  const totalPnlByCurrency = filtered.reduce<Record<string, number>>((acc, p) => {
     if (p.unrealizedPnl === null) return acc;
     acc[p.currency] = (acc[p.currency] ?? 0) + p.unrealizedPnl;
     return acc;
@@ -119,9 +186,27 @@ export function PortfolioDashboard() {
 
   return (
     <div className="flex flex-col gap-6">
+      <div role="tablist" aria-label="ポートフォリオの表示切替" className="inline-flex flex-wrap gap-1 rounded-button border border-border bg-surface-subtle p-0.5">
+        {TABS.map((t) => (
+          <button
+            key={t.value}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.value}
+            onClick={() => setTab(t.value)}
+            className={cn(
+              "rounded-sm px-3 py-1.5 text-xs font-semibold transition-colors",
+              tab === t.value ? "bg-surface text-primary shadow-card" : "text-text-secondary hover:text-text-primary"
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3 2xl:gap-4">
         <MetricCard label="保有銘柄数">
-          <MetricValue>{positions.length}銘柄</MetricValue>
+          <MetricValue>{filtered.length}銘柄</MetricValue>
         </MetricCard>
         <MetricCard label="評価額合計">
           <MetricValue>
@@ -144,59 +229,138 @@ export function PortfolioDashboard() {
       </div>
 
       <div className="rounded-card border border-border bg-surface p-5">
-        <p className="mb-3 text-lg font-bold text-text-primary">保有銘柄を追加</p>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3 md:flex-row md:items-end">
-          <div className="flex flex-1 flex-col gap-1">
-            <label htmlFor="position-symbol" className="text-xs font-semibold text-text-secondary">
-              銘柄コードまたは銘柄名（例: 7203.T, AAPL, トヨタ）
-            </label>
-            <SymbolCombobox id="position-symbol" value={symbol} onChange={setSymbol} placeholder="AAPL" />
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-lg font-bold text-text-primary">保有銘柄を追加</p>
+          <div role="group" aria-label="登録方法切替" className="inline-flex rounded-button border border-border p-0.5">
+            <button
+              type="button"
+              onClick={() => setIsManualMode(false)}
+              className={cn(
+                "rounded-sm px-3 py-1 text-xs font-semibold",
+                !isManualMode ? "bg-primary-soft text-primary" : "text-text-secondary"
+              )}
+            >
+              株式・ETF
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsManualMode(true)}
+              className={cn(
+                "rounded-sm px-3 py-1 text-xs font-semibold",
+                isManualMode ? "bg-primary-soft text-primary" : "text-text-secondary"
+              )}
+            >
+              投資信託（手入力）
+            </button>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="position-quantity" className="text-xs font-semibold text-text-secondary">
-              保有数量
-            </label>
-            <input
-              id="position-quantity"
-              type="number"
-              min="0"
-              step="any"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-              placeholder="10"
-              className="w-32 rounded-button border border-border px-3 py-2 text-sm outline-none focus-visible:border-focus"
-            />
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end">
+            {isManualMode ? (
+              <div className="flex flex-1 flex-col gap-1">
+                <label htmlFor="position-fund-name" className="text-xs font-semibold text-text-secondary">
+                  ファンド名
+                </label>
+                <input
+                  id="position-fund-name"
+                  value={manualName}
+                  onChange={(e) => setManualName(e.target.value)}
+                  placeholder="eMAXIS Slim 全世界株式(オール・カントリー)"
+                  className="rounded-button border border-border px-3 py-2 text-sm outline-none focus-visible:border-focus"
+                />
+              </div>
+            ) : (
+              <div className="flex flex-1 flex-col gap-1">
+                <label htmlFor="position-symbol" className="text-xs font-semibold text-text-secondary">
+                  銘柄コードまたは銘柄名（例: 7203.T, AAPL, トヨタ）
+                </label>
+                <SymbolCombobox id="position-symbol" value={symbol} onChange={setSymbol} placeholder="AAPL" />
+              </div>
+            )}
+
+            <div className="flex flex-col gap-1">
+              <label htmlFor="position-nisa" className="text-xs font-semibold text-text-secondary">
+                NISA区分（任意）
+              </label>
+              <select
+                id="position-nisa"
+                value={nisaType ?? ""}
+                onChange={(e) => setNisaType((e.target.value || null) as NisaType)}
+                className="rounded-button border border-border px-3 py-2 text-sm outline-none focus-visible:border-focus"
+              >
+                <option value="">なし（課税口座）</option>
+                <option value="tsumitate">積立NISA</option>
+                <option value="growth">成長投資枠</option>
+              </select>
+            </div>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="position-cost" className="text-xs font-semibold text-text-secondary">
-              取得単価（任意）
-            </label>
-            <input
-              id="position-cost"
-              type="number"
-              min="0"
-              step="any"
-              value={avgCost}
-              onChange={(e) => setAvgCost(e.target.value)}
-              placeholder="150.00"
-              className="w-32 rounded-button border border-border px-3 py-2 text-sm outline-none focus-visible:border-focus"
-            />
+
+          <div className="flex flex-col gap-3 md:flex-row md:items-end">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="position-quantity" className="text-xs font-semibold text-text-secondary">
+                保有数量{isManualMode ? "（口）" : ""}
+              </label>
+              <input
+                id="position-quantity"
+                type="number"
+                min="0"
+                step="any"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder={isManualMode ? "53950" : "10"}
+                className="w-36 rounded-button border border-border px-3 py-2 text-sm outline-none focus-visible:border-focus"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="position-cost" className="text-xs font-semibold text-text-secondary">
+                平均取得価額{isManualMode ? "（1万口あたり・任意）" : "（任意）"}
+              </label>
+              <input
+                id="position-cost"
+                type="number"
+                min="0"
+                step="any"
+                value={avgCost}
+                onChange={(e) => setAvgCost(e.target.value)}
+                placeholder={isManualMode ? "44022.24" : "150.00"}
+                className="w-40 rounded-button border border-border px-3 py-2 text-sm outline-none focus-visible:border-focus"
+              />
+            </div>
+            {isManualMode ? (
+              <div className="flex flex-col gap-1">
+                <label htmlFor="position-unit-price" className="text-xs font-semibold text-text-secondary">
+                  基準価額（1万口あたり）
+                </label>
+                <input
+                  id="position-unit-price"
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={manualUnitPrice}
+                  onChange={(e) => setManualUnitPrice(e.target.value)}
+                  placeholder="60489"
+                  className="w-40 rounded-button border border-border px-3 py-2 text-sm outline-none focus-visible:border-focus"
+                />
+              </div>
+            ) : null}
+            <button
+              type="submit"
+              disabled={addMutation.isPending}
+              className="rounded-button bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-60"
+            >
+              {addMutation.isPending ? "追加中..." : "追加"}
+            </button>
           </div>
-          <button
-            type="submit"
-            disabled={addMutation.isPending}
-            className="rounded-button bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-60"
-          >
-            {addMutation.isPending ? "追加中..." : "追加"}
-          </button>
         </form>
         {formError ? <p className="mt-2 text-xs text-danger">{formError}</p> : null}
         <p className="mt-2 text-xs text-text-muted">
-          手入力による記録です。証券口座とは連携していません（概算値）。
+          手入力による記録です。証券口座とは連携していません（概算値）。投資信託はYahoo
+          Financeにシンボルが無いため、基準価額を手入力で更新してください。
         </p>
       </div>
 
-      {isLoading ? null : positions.length === 0 ? (
+      {isLoading ? null : filtered.length === 0 ? (
         <EmptyState
           icon={Briefcase}
           title="保有銘柄がまだ登録されていません"
@@ -211,13 +375,13 @@ export function PortfolioDashboard() {
                   銘柄
                 </th>
                 <th scope="col" className="px-4 py-3">
-                  市場
+                  市場 / 区分
                 </th>
                 <th scope="col" className="px-4 py-3">
                   保有数量
                 </th>
                 <th scope="col" className="px-4 py-3">
-                  最新終値
+                  最新終値/基準価額
                 </th>
                 <th scope="col" className="px-4 py-3">
                   前営業日比
@@ -234,22 +398,35 @@ export function PortfolioDashboard() {
               </tr>
             </thead>
             <tbody>
-              {evaluated.map((p) => (
+              {filtered.map((p) => (
                 <tr
                   key={p.id}
-                  onClick={() => router.push(`/stocks/${encodeURIComponent(p.providerSymbol)}`)}
-                  className="cursor-pointer border-t border-border hover:bg-surface-subtle"
+                  onClick={() => {
+                    if (!p.isManual) router.push(`/stocks/${encodeURIComponent(p.providerSymbol)}`);
+                  }}
+                  className={cn(
+                    "border-t border-border",
+                    !p.isManual && "cursor-pointer hover:bg-surface-subtle"
+                  )}
                 >
                   <td className="px-4 py-3">
                     <p className="font-semibold text-text-primary">{p.name}</p>
                     <p className="text-xs text-text-muted">
-                      {p.displaySymbol} · {p.exchange ?? "—"}
+                      {p.isManual ? "投資信託（手入力）" : `${p.displaySymbol} · ${p.exchange ?? "—"}`}
                     </p>
                   </td>
                   <td className="px-4 py-3">
-                    <MarketBadge market={p.market} />
+                    <div className="flex flex-col gap-1">
+                      <MarketBadge market={p.market} />
+                      {p.nisaType ? (
+                        <span className="text-[11px] font-semibold text-primary">{NISA_LABEL[p.nisaType]}</span>
+                      ) : null}
+                    </div>
                   </td>
-                  <td className="px-4 py-3 tabular-nums">{p.quantity}</td>
+                  <td className="px-4 py-3 tabular-nums">
+                    {p.quantity.toLocaleString()}
+                    {p.instrumentType === "fund" ? "口" : "株"}
+                  </td>
                   <td className="px-4 py-3">
                     <CurrencyValue value={p.lastClose} currency={p.currency} />
                   </td>
