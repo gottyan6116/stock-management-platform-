@@ -1,6 +1,6 @@
 export type Market = "JP" | "US";
 export type Currency = "JPY" | "USD";
-export type InstrumentType = "stock" | "etf" | "index";
+export type InstrumentType = "stock" | "etf" | "index" | "fund";
 
 export interface Instrument {
   id: string;

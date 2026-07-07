@@ -1,14 +1,21 @@
 import type { InstrumentType, Market } from "@/types/domain";
-import { detectMarketFromProviderSymbol, normalizeProviderSymbol, toDisplaySymbol } from "../normalize";
+import {
+  detectMarketFromProviderSymbol,
+  isSupportedProviderSymbol,
+  normalizeProviderSymbol,
+  toDisplaySymbol,
+} from "../normalize";
 import type { DailyPriceRow, InstrumentSearchResult, QuoteSnapshot } from "../provider";
 
-// MVPで検索結果に含める種別。暗号資産・FX・投資信託・先物・オプション等は除外する（設計書11.1）。
-const SUPPORTED_QUOTE_TYPES = new Set(["EQUITY", "ETF", "INDEX"]);
+// MVPで検索結果に含める種別。暗号資産・FX・先物・オプション等は除外する（設計書11.1）。
+// オーナー指示（docs/adr/0002）により投資信託(MUTUALFUND)を追加。
+const SUPPORTED_QUOTE_TYPES = new Set(["EQUITY", "ETF", "INDEX", "MUTUALFUND"]);
 
 function toInstrumentType(quoteType: string): InstrumentType | null {
   if (quoteType === "EQUITY") return "stock";
   if (quoteType === "ETF") return "etf";
   if (quoteType === "INDEX") return "index";
+  if (quoteType === "MUTUALFUND") return "fund";
   return null;
 }
 
@@ -33,10 +40,10 @@ export function mapYahooSearchQuoteToInstrument(
   if (!instrumentType || !SUPPORTED_QUOTE_TYPES.has(quote.quoteType)) return null;
 
   const providerSymbol = normalizeProviderSymbol(quote.symbol);
+  // 他国市場のサフィックス付きシンボル（.SA, .L, .HK等）を除外する。
+  if (!isSupportedProviderSymbol(providerSymbol)) return null;
   const market = detectMarketFromProviderSymbol(providerSymbol);
   if (marketFilter && market !== marketFilter) return null;
-  // MVP対象市場（JP/US）以外の銘柄は除外する。
-  if (market !== "JP" && market !== "US") return null;
 
   const name =
     (typeof quote.longname === "string" && quote.longname) ||
@@ -83,8 +90,8 @@ export function mapYahooQuoteToInstrumentInfo(quote: YahooQuoteLike): Instrument
   if (!instrumentType || !SUPPORTED_QUOTE_TYPES.has(quote.quoteType)) return null;
 
   const providerSymbol = normalizeProviderSymbol(quote.symbol);
+  if (!isSupportedProviderSymbol(providerSymbol)) return null;
   const market = detectMarketFromProviderSymbol(providerSymbol);
-  if (market !== "JP" && market !== "US") return null;
 
   const name =
     (typeof quote.longName === "string" && quote.longName) ||

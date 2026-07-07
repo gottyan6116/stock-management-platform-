@@ -1,16 +1,57 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useMemo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Instrument } from "@/types/domain";
-import { MOCK_INSTRUMENT_CATALOG } from "@/lib/mock/instrument-catalog";
 
-/**
- * Phase 1〜3 の暫定実装。API/DB (Phase 4) が無いため、お気に入り状態をブラウザ内メモリで
- * 保持する。`useFavorites()` の呼び出し側インターフェースは Phase 4 でも変えない想定で、
- * 内部実装だけを TanStack Query + /api/favorites に差し替える。
- */
+interface FavoriteApiItem {
+  id: string;
+  favoriteId: string;
+  createdAt: string;
+  providerSymbol: string;
+  displaySymbol: string;
+  name: string;
+  exchange: string | null;
+  market: Instrument["market"];
+  currency: Instrument["currency"];
+  instrumentType: Instrument["instrumentType"];
+}
 
-const INITIAL_FAVORITE_SYMBOLS = ["7203.T", "8306.T", "AAPL", "NVDA", "MSFT"];
+function toInstrument(item: FavoriteApiItem): Instrument {
+  return {
+    id: item.id,
+    providerSymbol: item.providerSymbol,
+    displaySymbol: item.displaySymbol,
+    name: item.name,
+    exchange: item.exchange,
+    market: item.market,
+    currency: item.currency,
+    instrumentType: item.instrumentType,
+  };
+}
+
+async function fetchFavorites(): Promise<FavoriteApiItem[]> {
+  const res = await fetch("/api/favorites");
+  if (!res.ok) throw new Error(`favorites request failed: ${res.status}`);
+  const json = await res.json();
+  return json.data;
+}
+
+async function postFavorite(providerSymbol: string): Promise<FavoriteApiItem> {
+  const res = await fetch("/api/favorites", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ providerSymbol }),
+  });
+  if (!res.ok) throw new Error(`add favorite failed: ${res.status}`);
+  const json = await res.json();
+  return { ...json.data, favoriteId: json.data.id, createdAt: new Date().toISOString() };
+}
+
+async function deleteFavorite(instrumentId: string): Promise<void> {
+  const res = await fetch(`/api/favorites/${encodeURIComponent(instrumentId)}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`remove favorite failed: ${res.status}`);
+}
 
 interface FavoritesContextValue {
   favoriteInstruments: Instrument[];
@@ -21,28 +62,90 @@ interface FavoritesContextValue {
 
 const FavoritesContext = createContext<FavoritesContextValue | null>(null);
 
+const FAVORITES_KEY = ["favorites"] as const;
+
 export function FavoritesProvider({ children }: { children: React.ReactNode }) {
-  const [symbols, setSymbols] = useState<string[]>(INITIAL_FAVORITE_SYMBOLS);
+  const queryClient = useQueryClient();
 
-  const isFavorite = useCallback((providerSymbol: string) => symbols.includes(providerSymbol), [
-    symbols,
-  ]);
+  const { data } = useQuery({
+    queryKey: FAVORITES_KEY,
+    queryFn: fetchFavorites,
+    staleTime: 30_000,
+  });
 
-  const addFavorite = useCallback((instrument: Instrument) => {
-    setSymbols((prev) => (prev.includes(instrument.providerSymbol) ? prev : [...prev, instrument.providerSymbol]));
-  }, []);
+  const items = useMemo(() => data ?? [], [data]);
 
-  const removeFavorite = useCallback((providerSymbol: string) => {
-    setSymbols((prev) => prev.filter((s) => s !== providerSymbol));
-  }, []);
+  const addMutation = useMutation({
+    mutationFn: (instrument: Instrument) => postFavorite(instrument.providerSymbol),
+    onMutate: async (instrument) => {
+      await queryClient.cancelQueries({ queryKey: FAVORITES_KEY });
+      const previous = queryClient.getQueryData<FavoriteApiItem[]>(FAVORITES_KEY) ?? [];
+      const optimistic: FavoriteApiItem = {
+        id: instrument.id,
+        favoriteId: instrument.id,
+        createdAt: new Date().toISOString(),
+        providerSymbol: instrument.providerSymbol,
+        displaySymbol: instrument.displaySymbol,
+        name: instrument.name,
+        exchange: instrument.exchange,
+        market: instrument.market,
+        currency: instrument.currency,
+        instrumentType: instrument.instrumentType,
+      };
+      queryClient.setQueryData<FavoriteApiItem[]>(FAVORITES_KEY, [optimistic, ...previous]);
+      return { previous };
+    },
+    onError: (_err, _instrument, context) => {
+      if (context) queryClient.setQueryData(FAVORITES_KEY, context.previous);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: FAVORITES_KEY });
+    },
+  });
 
-  const favoriteInstruments = useMemo(
-    () =>
-      symbols
-        .map((symbol) => MOCK_INSTRUMENT_CATALOG[symbol])
-        .filter((instrument): instrument is Instrument => Boolean(instrument)),
-    [symbols]
+  const removeMutation = useMutation({
+    mutationFn: (providerSymbol: string) => {
+      const target = items.find((i) => i.providerSymbol === providerSymbol);
+      if (!target) throw new Error("favorite not found");
+      return deleteFavorite(target.id);
+    },
+    onMutate: async (providerSymbol) => {
+      await queryClient.cancelQueries({ queryKey: FAVORITES_KEY });
+      const previous = queryClient.getQueryData<FavoriteApiItem[]>(FAVORITES_KEY) ?? [];
+      queryClient.setQueryData<FavoriteApiItem[]>(
+        FAVORITES_KEY,
+        previous.filter((i) => i.providerSymbol !== providerSymbol)
+      );
+      return { previous };
+    },
+    onError: (_err, _symbol, context) => {
+      if (context) queryClient.setQueryData(FAVORITES_KEY, context.previous);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: FAVORITES_KEY });
+    },
+  });
+
+  const isFavorite = useCallback(
+    (providerSymbol: string) => items.some((i) => i.providerSymbol === providerSymbol),
+    [items]
   );
+
+  const addFavorite = useCallback(
+    (instrument: Instrument) => {
+      addMutation.mutate(instrument);
+    },
+    [addMutation]
+  );
+
+  const removeFavorite = useCallback(
+    (providerSymbol: string) => {
+      removeMutation.mutate(providerSymbol);
+    },
+    [removeMutation]
+  );
+
+  const favoriteInstruments = useMemo(() => items.map(toInstrument), [items]);
 
   const value = useMemo(
     () => ({ favoriteInstruments, isFavorite, addFavorite, removeFavorite }),

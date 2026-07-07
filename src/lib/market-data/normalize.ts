@@ -34,6 +34,18 @@ export function detectMarketFromProviderSymbol(providerSymbol: string): Market {
   return normalizeProviderSymbol(providerSymbol).endsWith(".T") ? "JP" : "US";
 }
 
+/**
+ * 対応市場（日本株=.T / 米国株=サフィックスなし）のシンボルのみtrue。
+ * `.SA`(サンパウロ)や`.L`(ロンドン)など他国市場の取引所サフィックス付きシンボルを
+ * 検索結果・詳細ページから除外するために使う。
+ */
+export function isSupportedProviderSymbol(providerSymbol: string): boolean {
+  const normalized = normalizeProviderSymbol(providerSymbol);
+  if (normalized.length === 0) return false;
+  if (normalized.endsWith(".T")) return true;
+  return !normalized.includes(".");
+}
+
 /** 表示用シンボル（画面表示コード）を導出する。日本株は`.T`を除いた4桁コード。 */
 export function toDisplaySymbol(providerSymbol: string): string {
   const normalized = normalizeProviderSymbol(providerSymbol);

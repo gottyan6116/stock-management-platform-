@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Globe2, Landmark, LineChart, Star } from "lucide-react";
+import { Briefcase, Globe2, Landmark, LineChart, PiggyBank, Star } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { UserMenu } from "./UserMenu";
 
 const NAV_ITEMS = [
+  { href: "/portfolio", label: "ポートフォリオ", icon: Briefcase },
   { href: "/favorites", label: "お気に入り銘柄", icon: Star },
   { href: "/japan", label: "日本株", icon: Landmark },
   { href: "/us", label: "米国株", icon: Globe2 },
+  { href: "/funds", label: "投資信託", icon: PiggyBank },
 ] as const;
 
 export function AppSidebar({ email }: { email: string }) {

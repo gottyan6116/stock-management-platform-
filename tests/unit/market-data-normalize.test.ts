@@ -3,6 +3,7 @@ import {
   dedupeSearchResults,
   detectMarketFromProviderSymbol,
   generateJapaneseTickerCandidates,
+  isSupportedProviderSymbol,
   normalizeProviderSymbol,
   normalizeSearchQuery,
   toDisplaySymbol,
@@ -41,6 +42,23 @@ describe("generateJapaneseTickerCandidates", () => {
     expect(generateJapaneseTickerCandidates("AAPL")).toEqual([]);
     expect(generateJapaneseTickerCandidates("720")).toEqual([]);
     expect(generateJapaneseTickerCandidates("72033")).toEqual([]);
+  });
+});
+
+describe("isSupportedProviderSymbol", () => {
+  it("日本株(.T)と米国株(サフィックスなし)を許可する", () => {
+    expect(isSupportedProviderSymbol("7203.T")).toBe(true);
+    expect(isSupportedProviderSymbol("AAPL")).toBe(true);
+  });
+
+  it("他国市場のサフィックス付きシンボルは除外する", () => {
+    expect(isSupportedProviderSymbol("SPCX34.SA")).toBe(false);
+    expect(isSupportedProviderSymbol("VOD.L")).toBe(false);
+    expect(isSupportedProviderSymbol("0700.HK")).toBe(false);
+  });
+
+  it("空文字は除外する", () => {
+    expect(isSupportedProviderSymbol("")).toBe(false);
   });
 });
 

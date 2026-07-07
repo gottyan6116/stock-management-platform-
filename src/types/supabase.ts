@@ -26,7 +26,7 @@ export interface Database {
           exchange: string | null;
           market: "JP" | "US";
           currency: "JPY" | "USD";
-          instrument_type: "stock" | "etf" | "index";
+          instrument_type: "stock" | "etf" | "index" | "fund";
           sector: string | null;
           industry: string | null;
           is_active: boolean;
@@ -40,6 +40,36 @@ export interface Database {
           >;
         Update: Partial<Database["public"]["Tables"]["instruments"]["Row"]>;
         Relationships: Relationship[];
+      };
+      positions: {
+        Row: {
+          id: string;
+          user_id: string;
+          instrument_id: string;
+          quantity: number;
+          avg_cost: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          instrument_id: string;
+          quantity: number;
+          avg_cost?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["positions"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "positions_instrument_id_fkey";
+            columns: ["instrument_id"];
+            isOneToOne: false;
+            referencedRelation: "instruments";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       favorites: {
         Row: {

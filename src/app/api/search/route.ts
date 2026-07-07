@@ -23,7 +23,7 @@ function instrumentRowToSearchResult(row: {
   exchange: string | null;
   market: "JP" | "US";
   currency: "JPY" | "USD";
-  instrument_type: "stock" | "etf" | "index";
+  instrument_type: "stock" | "etf" | "index" | "fund";
 }): InstrumentSearchResult {
   return {
     providerSymbol: row.provider_symbol,
