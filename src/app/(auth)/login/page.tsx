@@ -11,7 +11,7 @@ export default function LoginPage() {
           <span className="text-lg font-bold text-text-primary">StockScope</span>
         </div>
         <p className="mb-6 text-center text-sm text-text-secondary">
-          登録済みのメールアドレスにログインリンクを送信します
+          登録済みのメールアドレスとパスワードでログインしてください
         </p>
         <Suspense>
           <LoginForm />

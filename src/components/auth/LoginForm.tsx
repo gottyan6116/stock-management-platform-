@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const ERROR_MESSAGE: Record<string, string> = {
@@ -10,34 +10,29 @@ const ERROR_MESSAGE: Record<string, string> = {
 };
 
 export function LoginForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirectTo") ?? "/favorites";
   const errorCode = searchParams.get("error");
 
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [password, setPassword] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setStatus("sending");
+    setStatus("loading");
 
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`,
-      },
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
 
-    setStatus(error ? "error" : "sent");
-  }
+    if (error) {
+      setStatus("error");
+      return;
+    }
 
-  if (status === "sent") {
-    return (
-      <p className="text-center text-sm text-text-secondary">
-        {email} 宛にログインリンクを送信しました。メールを確認してください。
-      </p>
-    );
+    router.push(redirectTo);
+    router.refresh();
   }
 
   return (
@@ -49,7 +44,7 @@ export function LoginForm() {
       ) : null}
       {status === "error" ? (
         <p className="rounded-sm bg-danger-soft px-3 py-2 text-xs text-danger">
-          送信に失敗しました。時間をおいて再度お試しください。
+          メールアドレスまたはパスワードが正しくありません。
         </p>
       ) : null}
       <label htmlFor="email" className="text-xs font-semibold text-text-secondary">
@@ -64,12 +59,24 @@ export function LoginForm() {
         placeholder="you@example.com"
         className="rounded-button border border-border px-3 py-2 text-sm outline-none focus-visible:border-focus"
       />
+      <label htmlFor="password" className="text-xs font-semibold text-text-secondary">
+        パスワード
+      </label>
+      <input
+        id="password"
+        type="password"
+        required
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder="••••••••"
+        className="rounded-button border border-border px-3 py-2 text-sm outline-none focus-visible:border-focus"
+      />
       <button
         type="submit"
-        disabled={status === "sending"}
+        disabled={status === "loading"}
         className="mt-2 rounded-button bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-60"
       >
-        {status === "sending" ? "送信中..." : "ログインリンクを送信"}
+        {status === "loading" ? "ログイン中..." : "ログイン"}
       </button>
     </form>
   );
