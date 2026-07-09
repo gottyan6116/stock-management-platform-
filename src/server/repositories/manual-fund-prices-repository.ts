@@ -31,3 +31,21 @@ export async function upsertManualFundPrice(
     );
   if (error) throw error;
 }
+
+/** 証券会社の画面で見える過去の基準価額をまとめて取り込む（CSV/貼り付け一括登録用）。書き込みはservice role専用。 */
+export async function bulkUpsertManualFundPrices(
+  supabase: SupabaseClient<Database>,
+  instrumentId: string,
+  rows: { priceDate: string; unitPrice: number }[]
+): Promise<void> {
+  if (rows.length === 0) return;
+  const { error } = await supabase.from("manual_fund_prices").upsert(
+    rows.map((row) => ({
+      instrument_id: instrumentId,
+      price_date: row.priceDate,
+      unit_price: row.unitPrice,
+    })),
+    { onConflict: "instrument_id,price_date" }
+  );
+  if (error) throw error;
+}

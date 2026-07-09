@@ -11,6 +11,7 @@ import { PercentChange } from "@/components/tables/PercentChange";
 import { CurrencyValue } from "@/components/tables/CurrencyValue";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { SymbolCombobox } from "@/components/search/SymbolCombobox";
+import { FundNameCombobox } from "@/components/search/FundNameCombobox";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
@@ -283,12 +284,11 @@ export function PortfolioDashboard() {
                 <label htmlFor="position-fund-name" className="text-xs font-semibold text-text-secondary">
                   ファンド名
                 </label>
-                <input
+                <FundNameCombobox
                   id="position-fund-name"
                   value={manualName}
-                  onChange={(e) => setManualName(e.target.value)}
+                  onChange={setManualName}
                   placeholder="eMAXIS Slim 全世界株式(オール・カントリー)"
-                  className="rounded-button border border-border px-3 py-2 text-sm outline-none focus-visible:border-focus"
                 />
               </div>
             ) : (

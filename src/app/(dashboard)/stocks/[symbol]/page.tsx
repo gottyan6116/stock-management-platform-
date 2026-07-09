@@ -6,6 +6,7 @@ import { normalizeProviderSymbol } from "@/lib/market-data/normalize";
 import { createClient } from "@/lib/supabase/server";
 import { findInstrumentByProviderSymbol } from "@/server/repositories/instruments-repository";
 import { listManualFundPrices } from "@/server/repositories/manual-fund-prices-repository";
+import { ManualFundPriceHistoryForm } from "@/components/funds/ManualFundPriceHistoryForm";
 import type { DailyPrice, Instrument } from "@/types/domain";
 import { MetricCard, MetricValue } from "@/components/ui/MetricCard";
 import { PriceChart } from "@/components/charts/PriceChart";
@@ -114,6 +115,8 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
           この銘柄はYahoo Financeにデータが無い投資信託のため、基準価額はポートフォリオ画面での手入力に基づきます。
           自動更新は行われません。最終取得: {formatDateTime(latest?.fetched_at ?? null)}
         </div>
+
+        <ManualFundPriceHistoryForm instrumentId={manualInstrument.id} />
       </div>
     );
   }

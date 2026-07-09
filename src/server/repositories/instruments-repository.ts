@@ -28,6 +28,29 @@ export async function searchInstruments(
   return data ?? [];
 }
 
+/** 自分が過去に手入力登録した投資信託（provider='manual'）のみを名前で検索する。新規発見用ではなく、既存登録の再選択用。 */
+export async function searchManualFundInstruments(
+  supabase: SupabaseClient<Database>,
+  query: string,
+  limit = 10
+): Promise<InstrumentRow[]> {
+  let request = supabase
+    .from("instruments")
+    .select("*")
+    .eq("is_active", true)
+    .eq("provider", "manual")
+    .order("name")
+    .limit(limit);
+
+  if (query.length > 0) {
+    request = request.ilike("name", `%${query}%`);
+  }
+
+  const { data, error } = await request;
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function findInstrumentByProviderSymbol(
   supabase: SupabaseClient<Database>,
   providerSymbol: string,
