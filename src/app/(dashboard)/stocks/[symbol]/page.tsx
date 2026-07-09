@@ -25,11 +25,13 @@ function todayIso(): string {
 }
 
 export default async function StockDetailPage({ params }: { params: { symbol: string } }) {
-  const providerSymbol = normalizeProviderSymbol(decodeURIComponent(params.symbol));
+  const rawSymbol = decodeURIComponent(params.symbol);
   const supabase = createClient();
 
-  // Yahoo Financeにシンボルが無い手入力ファンドは別経路（自前のinstruments/manual_fund_prices）で解決する。
-  const manualInstrument = await findInstrumentByProviderSymbol(supabase, providerSymbol, "manual").catch(
+  // 手入力ファンドのprovider_symbolは実在のティッカーではなくファンド名から生成した文字列で、
+  // 大文字小文字を区別する（英字部分を含む名前だとnormalizeProviderSymbolの大文字化で
+  // 実際の値と一致しなくなるため、こちらはURLデコードした生の値でそのまま検索する）。
+  const manualInstrument = await findInstrumentByProviderSymbol(supabase, rawSymbol, "manual").catch(
     () => null
   );
 
@@ -98,11 +100,13 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
           </MetricCard>
         </div>
 
-        {dailyPrices.length > 0 ? (
+        {dailyPrices.length >= 2 ? (
           <PriceChart dailyPrices={dailyPrices} title={instrument.name} initialMode="line" />
         ) : (
           <div className="rounded-card border border-border bg-surface p-8 text-center text-sm text-text-secondary">
-            まだ基準価額の履歴がありません。ポートフォリオで基準価額を入力すると、ここに履歴が記録されます。
+            {dailyPrices.length === 0
+              ? "まだ基準価額の履歴がありません。ポートフォリオで基準価額を入力すると、ここに履歴が記録されます。"
+              : "基準価額の記録が1件のみのため、グラフはまだ表示できません。次回の更新で推移が表示されます。"}
           </div>
         )}
 
@@ -114,6 +118,7 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
     );
   }
 
+  const providerSymbol = normalizeProviderSymbol(rawSymbol);
   const provider = getMarketDataProvider();
   const info = await provider.getInstrumentInfo(providerSymbol).catch(() => null);
   if (!info) {
