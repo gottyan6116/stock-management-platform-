@@ -25,15 +25,17 @@ export function PriceChart({
   title,
   initialInterval = "week",
   initialRange = "3y",
+  initialMode = "candlestick",
 }: {
   dailyPrices: DailyPrice[];
   title?: string;
   initialInterval?: ChartInterval;
   initialRange?: ChartRange;
+  initialMode?: ChartMode;
 }) {
   const [interval, setInterval] = useState<ChartInterval>(initialInterval);
   const [range, setRange] = useState<ChartRange>(initialRange);
-  const [mode, setMode] = useState<ChartMode>("candlestick");
+  const [mode, setMode] = useState<ChartMode>(initialMode);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);

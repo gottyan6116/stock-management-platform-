@@ -3,13 +3,16 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { getMarketDataProvider } from "@/lib/market-data/get-provider";
 import { normalizeProviderSymbol } from "@/lib/market-data/normalize";
-import type { Instrument } from "@/types/domain";
+import { createClient } from "@/lib/supabase/server";
+import { findInstrumentByProviderSymbol } from "@/server/repositories/instruments-repository";
+import { listManualFundPrices } from "@/server/repositories/manual-fund-prices-repository";
+import type { DailyPrice, Instrument } from "@/types/domain";
 import { MetricCard, MetricValue } from "@/components/ui/MetricCard";
 import { PriceChart } from "@/components/charts/PriceChart";
 import { PercentChange } from "@/components/tables/PercentChange";
 import { CurrencyValue } from "@/components/tables/CurrencyValue";
 import { FavoriteToggle } from "@/components/search/FavoriteToggle";
-import { formatDate, formatPercent } from "@/lib/utils/format";
+import { formatDate, formatDateTime, formatPercent } from "@/lib/utils/format";
 
 function tenYearsAgoIso(): string {
   const d = new Date();
@@ -23,8 +26,95 @@ function todayIso(): string {
 
 export default async function StockDetailPage({ params }: { params: { symbol: string } }) {
   const providerSymbol = normalizeProviderSymbol(decodeURIComponent(params.symbol));
-  const provider = getMarketDataProvider();
+  const supabase = createClient();
 
+  // Yahoo Financeにシンボルが無い手入力ファンドは別経路（自前のinstruments/manual_fund_prices）で解決する。
+  const manualInstrument = await findInstrumentByProviderSymbol(supabase, providerSymbol, "manual").catch(
+    () => null
+  );
+
+  if (manualInstrument) {
+    const priceHistory = await listManualFundPrices(supabase, manualInstrument.id).catch(() => []);
+    const dailyPrices: DailyPrice[] = priceHistory.map((row) => ({
+      tradingDate: row.price_date,
+      open: row.unit_price,
+      high: row.unit_price,
+      low: row.unit_price,
+      close: row.unit_price,
+      adjustedClose: row.unit_price,
+      volume: null,
+    }));
+
+    const latest = priceHistory.at(-1) ?? null;
+    const previous = priceHistory.length > 1 ? priceHistory[priceHistory.length - 2]! : null;
+    const change = latest && previous ? latest.unit_price - previous.unit_price : null;
+    const changePercent =
+      latest && previous && previous.unit_price !== 0 ? (change! / previous.unit_price) * 100 : null;
+
+    const instrument: Instrument = {
+      id: manualInstrument.id,
+      providerSymbol: manualInstrument.provider_symbol,
+      displaySymbol: manualInstrument.display_symbol,
+      name: manualInstrument.name,
+      exchange: manualInstrument.exchange,
+      market: manualInstrument.market,
+      currency: manualInstrument.currency,
+      instrumentType: manualInstrument.instrument_type,
+    };
+
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-3">
+          <Link
+            href="/funds"
+            className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-text-secondary hover:text-primary"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+            戻る
+          </Link>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-bold text-text-primary md:text-[30px]">{instrument.name}</h1>
+              <p className="text-sm text-text-secondary">投資信託（手入力） · {instrument.currency}</p>
+            </div>
+            <FavoriteToggle instrument={instrument} />
+          </div>
+          <p className="text-xs text-text-muted">基準価額 更新日 {formatDate(latest?.price_date ?? null)}</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+          <MetricCard label="最新基準価額（1万口あたり）">
+            <MetricValue>
+              <CurrencyValue value={latest?.unit_price ?? null} currency={instrument.currency} />
+            </MetricValue>
+          </MetricCard>
+          <MetricCard label="前回更新比">
+            <MetricValue>
+              <PercentChange amount={change} percent={changePercent} />
+            </MetricValue>
+          </MetricCard>
+          <MetricCard label="更新回数">
+            <MetricValue>{priceHistory.length}回</MetricValue>
+          </MetricCard>
+        </div>
+
+        {dailyPrices.length > 0 ? (
+          <PriceChart dailyPrices={dailyPrices} title={instrument.name} initialMode="line" />
+        ) : (
+          <div className="rounded-card border border-border bg-surface p-8 text-center text-sm text-text-secondary">
+            まだ基準価額の履歴がありません。ポートフォリオで基準価額を入力すると、ここに履歴が記録されます。
+          </div>
+        )}
+
+        <div className="rounded-card border border-border bg-surface p-5 text-xs text-text-muted">
+          この銘柄はYahoo Financeにデータが無い投資信託のため、基準価額はポートフォリオ画面での手入力に基づきます。
+          自動更新は行われません。最終取得: {formatDateTime(latest?.fetched_at ?? null)}
+        </div>
+      </div>
+    );
+  }
+
+  const provider = getMarketDataProvider();
   const info = await provider.getInstrumentInfo(providerSymbol).catch(() => null);
   if (!info) {
     notFound();

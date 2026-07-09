@@ -284,6 +284,26 @@ export interface Database {
           },
         ];
       };
+      manual_fund_prices: {
+        Row: {
+          instrument_id: string;
+          price_date: string;
+          unit_price: number;
+          fetched_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["manual_fund_prices"]["Row"]> &
+          Pick<Database["public"]["Tables"]["manual_fund_prices"]["Row"], "instrument_id" | "price_date" | "unit_price">;
+        Update: Partial<Database["public"]["Tables"]["manual_fund_prices"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "manual_fund_prices_instrument_id_fkey";
+            columns: ["instrument_id"];
+            isOneToOne: false;
+            referencedRelation: "instruments";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

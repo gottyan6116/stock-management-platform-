@@ -424,11 +424,11 @@ export function PortfolioDashboard() {
                 <tr
                   key={p.id}
                   onClick={() => {
-                    if (!p.isManual) router.push(`/stocks/${encodeURIComponent(p.providerSymbol)}`);
+                    router.push(`/stocks/${encodeURIComponent(p.providerSymbol)}`);
                   }}
                   className={cn(
                     "border-t border-border",
-                    !p.isManual && "cursor-pointer hover:bg-surface-subtle"
+                    "cursor-pointer hover:bg-surface-subtle"
                   )}
                 >
                   <td className="px-4 py-3">
@@ -489,14 +489,11 @@ export function PortfolioDashboard() {
             <div
               key={p.id}
               onClick={() => {
-                if (!p.isManual) router.push(`/stocks/${encodeURIComponent(p.providerSymbol)}`);
+                router.push(`/stocks/${encodeURIComponent(p.providerSymbol)}`);
               }}
-              role={p.isManual ? undefined : "button"}
-              tabIndex={p.isManual ? undefined : 0}
-              className={cn(
-                "flex flex-col gap-2 rounded-card border border-border bg-surface p-4",
-                !p.isManual && "cursor-pointer"
-              )}
+              role="button"
+              tabIndex={0}
+              className="flex cursor-pointer flex-col gap-2 rounded-card border border-border bg-surface p-4"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">

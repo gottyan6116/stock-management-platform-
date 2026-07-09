@@ -3,11 +3,13 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { listPositions, upsertPosition } from "@/server/repositories/positions-repository";
 import { addFavorite } from "@/server/repositories/favorites-repository";
+import { upsertManualFundPrice } from "@/server/repositories/manual-fund-prices-repository";
 import {
   resolveOrCreateInstrument,
   resolveOrCreateManualFundInstrument,
 } from "@/server/services/resolve-instrument";
 import { getMarketDataProvider } from "@/lib/market-data/get-provider";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { apiError } from "@/lib/errors/api-error";
 
 // 投資信託(口数ベース)の基準価額は「10,000口あたり」の慣行で表示される。
@@ -126,6 +128,17 @@ export async function POST(request: NextRequest) {
       await addFavorite(supabase, user.id, instrument.id).catch((error: { code?: string }) => {
         if (error.code !== "23505") throw error;
       });
+
+      // 基準価額の履歴を記録する（詳細ページのチャート用）。instrumentsと同様に共有データなのでservice role書き込み。
+      if (parsed.data.manualUnitPrice !== undefined) {
+        const serviceClient = createServiceRoleClient();
+        await upsertManualFundPrice(
+          serviceClient,
+          instrument.id,
+          parsed.data.manualUnitPrice,
+          new Date().toISOString().slice(0, 10)
+        ).catch(() => null);
+      }
     }
 
     return NextResponse.json({ data: position });
