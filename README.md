@@ -1,9 +1,17 @@
-# StockScope
+# My portfolio DB
 
-日本株・米国株を横断する長期投資向け個人株価Webアプリ（MVP）。
+日本株・米国株を横断し、ポートフォリオの収益性と長期的な成長を、根拠・見通し・下振れリスクから判断するための個人投資家向けWebアプリ。
 
-仕様の最上位ソースは `docs/spec/stockscope_complete_instruction_spec.md`（設計書コピー）。
-実装中に仕様と不整合が生じた場合は `docs/adr/` にADRを追加し、無断でスコープを変更しない。
+## Release 1の調査データ
+
+Release 1は、ブランド、ナビゲーション、UI/UX基盤のリリースです。現行アプリが提供する保有資産、価格、お気に入り、ファンド、シミュレーションのデータは引き続き利用しますが、調査アウトルック、根拠、スコアはライブ調査ではなく、画面上で「サンプル」と表示するサンプルデータです。
+
+ライブ調査には、Release 2のSupabase構造化調査基盤と、Release 3のCloudflare収集パイプライン（公式または許諾済みソース）の実装が必要です。Release 1のサンプルデータをライブの市場調査や投資助言として使用しないでください。
+
+Release 1の承認済み仕様は
+`docs/superpowers/specs/2026-08-16-my-portfolio-db-redesign-design.md`、実装手順は
+`docs/superpowers/plans/2026-08-16-my-portfolio-db-release-1.md` を参照してください。
+実装中に仕様と不整合が生じた場合は `docs/adr/` にADRを追加し、無断でスコープを変更しません。
 
 ## セットアップ
 
@@ -33,49 +41,46 @@ URL/Keyを要求するため）。以下の手順で準備してください。
 
 ## スクリプト
 
-| コマンド | 内容 |
-|---|---|
-| `npm run dev` | 開発サーバ |
-| `npm run build` | 本番ビルド |
-| `npm run start` | ビルド結果を起動 |
-| `npm run lint` | ESLint |
-| `npm run typecheck` | tsc --noEmit |
-| `npm run test` | Vitest（unit / integration） |
-| `npm run e2e` | Playwright E2E |
+| コマンド            | 内容                         |
+| ------------------- | ---------------------------- |
+| `npm run dev`       | 開発サーバ                   |
+| `npm run build`     | 本番ビルド                   |
+| `npm run start`     | ビルド結果を起動             |
+| `npm run lint`      | ESLint                       |
+| `npm run typecheck` | tsc --noEmit                 |
+| `npm run test`      | Vitest（unit / integration） |
+| `npm run e2e`       | Playwright E2E               |
 
 ## ディレクトリ構成
 
 ```text
-src/app/            App Router（(auth)/login, (dashboard)/favorites|japan|us|stocks/[symbol]|settings, api/）
-src/components/     app-shell, charts, search, stocks, tables, freshness, feedback, ui
-src/features/       auth, favorites, instruments, markets, prices, sync
-src/lib/            market-data(Provider Adapter), aggregation, currency, supabase, validation, errors, utils
+src/app/            App Router（login, home, portfolio, favorites, markets, stocks/[symbol], research, settings, api）
+src/components/     app-shell, home, portfolio, research, charts, search, stocks, feedback, ui
+src/features/       auth, favorites, instruments, markets, portfolio, prices, research, sync
+src/lib/            market-data, aggregation, currency, navigation, supabase, validation, errors, utils
 src/server/         repositories, services, jobs
 src/types/          共有ドメイン型
-src/config/         注目銘柄などの設定ファイル
+src/config/         製品、ナビゲーション、調査表示、注目銘柄などの設定ファイル
 supabase/           migrations, seed.sql, tests
 tests/              unit, integration, e2e, visual
 docs/adr/           仕様変更の判断記録
 ```
 
-## 現状（実装フェーズ）
+## 現状（Release 1）
 
-- [x] Phase 0: Repository Setup
-- [x] Phase 1: Design Shell（モックデータ、バックエンドなし）
-- [x] Phase 2: Auth / DB (Supabase, RLS) — コードは実装済み。Supabaseプロジェクト作成・migration適用はユーザー側作業
-- [ ] Phase 3: Provider / Search
-- [ ] Phase 4: Favorites
-- [ ] Phase 5: Price History / Chart
-- [ ] Phase 6: Market Pages
-- [ ] Phase 7: Sync (cron / manual)
-- [ ] Phase 8: Polish (a11y, perf, E2E, visual regression)
+- [x] Supabase Auth / RLSと既存データワークフロー
+- [x] 保有資産、お気に入り、ファンド、市場、シミュレーション、手入力ファンド
+- [x] My portfolio DBのブランド、ナビゲーション、ホーム、銘柄詳細、調査UI
+- [x] 明示ラベル付きの固定サンプル調査データ
+- [ ] Release 2: Supabase構造化調査基盤
+- [ ] Release 3: 公式または許諾済みソースの収集パイプライン
 
 ## デプロイについて
 
 このアプリはAPI Routes・Cron・Supabase Auth Callbackを使うため、静的ホスティングのGitHub Pagesでは動作しません
-（設計書37章の通りVercel Cronを前提とした設計）。GitHubリポジトリはソース管理のみに使い、デプロイはVercelを利用してください。
+（Vercel Cronを前提とした設計）。GitHubリポジトリはソース管理のみに使い、デプロイはVercelを利用してください。
 
-## MVPで実装しないもの
+## Release 1で実装しないもの
 
-株式売買、証券口座連携、板情報、秒/分足、リアルタイムWebSocket、ニュース、AI投資助言、
-全上場銘柄の常時同期、保有数量・評価損益、税金計算 など（詳細は設計書 4.2 を参照）。
+株式売買、証券口座連携、ライブ板・需給、秒/分足、リアルタイムWebSocket、ライブニュース、
+ライブ調査・AI投資助言、全上場銘柄の常時同期、税金計算。保有数量、通貨別評価額、評価損益は既存機能として引き続き利用できます。

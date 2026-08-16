@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/supabase";
+import { sanitizeInternalPath } from "@/lib/navigation/internal-path";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
@@ -27,7 +28,9 @@ export async function updateSession(request: NextRequest) {
         setAll(cookiesToSet: CookieToSet[]) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           response = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
         },
       },
     }
@@ -41,7 +44,10 @@ export async function updateSession(request: NextRequest) {
 
   if (!user && !isPublicPath) {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("redirectTo", request.nextUrl.pathname);
+    loginUrl.searchParams.set(
+      "redirectTo",
+      sanitizeInternalPath(`${request.nextUrl.pathname}${request.nextUrl.search}`)
+    );
     return NextResponse.redirect(loginUrl);
   }
 
@@ -58,7 +64,8 @@ export async function updateSession(request: NextRequest) {
     }
 
     if (request.nextUrl.pathname === "/login") {
-      return NextResponse.redirect(new URL("/favorites", request.url));
+      const redirectTo = sanitizeInternalPath(request.nextUrl.searchParams.get("redirectTo"));
+      return NextResponse.redirect(new URL(redirectTo, request.url));
     }
   }
 

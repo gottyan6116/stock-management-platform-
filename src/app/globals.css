@@ -3,31 +3,38 @@
 @tailwind utilities;
 
 :root {
-  --background: #f7f9fc;
+  --background: #f5f8fd;
   --surface: #ffffff;
-  --surface-subtle: #f8fafc;
+  --surface-subtle: #f8faff;
 
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
+  --text-primary: #26375d;
+  --text-secondary: #445674;
+  --text-muted: #8796aa;
 
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
+  --border: #e0e7f0;
+  --border-strong: #cbd7e6;
 
-  --primary: #155eef;
-  --primary-hover: #0b4dd8;
-  --primary-soft: #eaf2ff;
+  --primary: #4d7cff;
+  --primary-hover: #3d69e8;
+  --primary-soft: #eef3ff;
 
-  --success: #15803d;
-  --success-soft: #ecfdf3;
+  --success: #5db852;
+  --success-soft: #dffbd8;
+  --success-text: color-mix(in srgb, var(--success) 50%, var(--text-primary));
 
-  --danger: #dc2626;
-  --danger-soft: #fef2f2;
+  --danger: #ef5c49;
+  --danger-soft: #ffe6e1;
+  --danger-text: color-mix(in srgb, var(--danger) 50%, var(--text-primary));
 
-  --warning: #d97706;
-  --warning-soft: #fffbeb;
+  --warning: #ff813e;
+  --warning-soft: #fff0e7;
+  --warning-text: color-mix(in srgb, var(--warning) 50%, var(--text-primary));
 
-  --focus: #2563eb;
+  --focus: #315ee8;
+
+  --series-mint: #58c3a2;
+  --series-cyan: #45b3d8;
+  --series-yellow: #f5b936;
 }
 
 @layer base {

@@ -22,29 +22,35 @@ const config: Config = {
         success: {
           DEFAULT: "var(--success)",
           soft: "var(--success-soft)",
+          text: "var(--success-text)",
         },
         danger: {
           DEFAULT: "var(--danger)",
           soft: "var(--danger-soft)",
+          text: "var(--danger-text)",
         },
         warning: {
           DEFAULT: "var(--warning)",
           soft: "var(--warning-soft)",
+          text: "var(--warning-text)",
         },
         focus: "var(--focus)",
+        "series-mint": "var(--series-mint)",
+        "series-cyan": "var(--series-cyan)",
+        "series-yellow": "var(--series-yellow)",
       },
       fontFamily: {
         sans: ["Inter", "Noto Sans JP", "system-ui", "sans-serif"],
       },
       borderRadius: {
         sm: "8px",
-        button: "10px",
-        card: "14px",
-        "card-lg": "16px",
-        modal: "18px",
+        button: "5px",
+        card: "7px",
+        "card-lg": "8px",
+        modal: "8px",
       },
       boxShadow: {
-        card: "0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 20px rgba(15, 23, 42, 0.05)",
+        card: "0 3px 8px rgba(45, 68, 108, 0.06)",
       },
       maxWidth: {
         content: "1600px",

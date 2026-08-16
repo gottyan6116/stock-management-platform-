@@ -4,7 +4,7 @@ export function MarketRatioDonut({ jpCount, usCount }: { jpCount: number; usCoun
 
   const gradient =
     total > 0
-      ? `conic-gradient(var(--primary-soft) 0% ${jpPercent}%, var(--primary) ${jpPercent}% 100%)`
+      ? `conic-gradient(var(--series-cyan) 0% ${jpPercent}%, var(--primary) ${jpPercent}% 100%)`
       : "conic-gradient(var(--border) 0% 100%)";
 
   return (
@@ -17,12 +17,12 @@ export function MarketRatioDonut({ jpCount, usCount }: { jpCount: number; usCoun
       >
         <div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-surface">
           <span className="text-2xl font-bold tabular-nums text-text-primary">{total}</span>
-          <span className="text-xs text-text-muted">合計銘柄</span>
+          <span className="text-xs text-text-secondary">合計銘柄</span>
         </div>
       </div>
       <div className="flex gap-6 text-sm">
         <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-primary-soft" aria-hidden />
+          <span className="h-2.5 w-2.5 rounded-full bg-series-cyan" aria-hidden />
           日本株 {jpCount}
         </span>
         <span className="flex items-center gap-1.5">

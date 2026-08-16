@@ -84,12 +84,7 @@ export function GlobalStockSearch() {
   const trimmedQuery = debouncedQuery.trim();
   const searchEnabled = trimmedQuery.length >= 2;
 
-  const {
-    data,
-    isFetching,
-    isError,
-    refetch,
-  } = useQuery({
+  const { data, isFetching, isError, refetch } = useQuery({
     queryKey: ["search", trimmedQuery],
     queryFn: () => fetchSearch(trimmedQuery),
     enabled: searchEnabled,
@@ -146,6 +141,7 @@ export function GlobalStockSearch() {
           ref={inputRef}
           id="global-stock-search-input"
           role="combobox"
+          aria-label="銘柄検索"
           aria-expanded={open}
           aria-controls="global-search-listbox"
           type="text"

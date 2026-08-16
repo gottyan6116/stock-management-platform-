@@ -13,7 +13,22 @@ import { PriceChart } from "@/components/charts/PriceChart";
 import { PercentChange } from "@/components/tables/PercentChange";
 import { CurrencyValue } from "@/components/tables/CurrencyValue";
 import { FavoriteToggle } from "@/components/search/FavoriteToggle";
+import { EvidenceCoveragePanel } from "@/components/research/EvidenceCoveragePanel";
+import { InstrumentDetailTabs } from "@/components/research/InstrumentDetailTabs";
+import { ResearchOutlookPanel } from "@/components/research/ResearchOutlookPanel";
+import { AnalyticsPanel } from "@/components/ui/AnalyticsPanel";
+import { isSampleResearchEnabled } from "@/config/research";
+import { getResearchOutlook } from "@/features/research/sample-outlooks";
 import { formatDate, formatDateTime, formatPercent } from "@/lib/utils/format";
+
+function UnavailableResearchPanel({ title, description }: { title: string; description: string }) {
+  return (
+    <AnalyticsPanel title={title}>
+      <p className="text-sm font-semibold text-text-primary">実データはまだ接続されていません</p>
+      <p className="mt-1 text-sm leading-6 text-text-secondary">{description}</p>
+    </AnalyticsPanel>
+  );
+}
 
 function tenYearsAgoIso(): string {
   const d = new Date();
@@ -32,9 +47,11 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
   // 手入力ファンドのprovider_symbolは実在のティッカーではなくファンド名から生成した文字列で、
   // 大文字小文字を区別する（英字部分を含む名前だとnormalizeProviderSymbolの大文字化で
   // 実際の値と一致しなくなるため、こちらはURLデコードした生の値でそのまま検索する）。
-  const manualInstrument = await findInstrumentByProviderSymbol(supabase, rawSymbol, "manual").catch(
-    () => null
-  );
+  const manualInstrument = await findInstrumentByProviderSymbol(
+    supabase,
+    rawSymbol,
+    "manual"
+  ).catch(() => null);
 
   if (manualInstrument) {
     const priceHistory = await listManualFundPrices(supabase, manualInstrument.id).catch(() => []);
@@ -52,7 +69,9 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
     const previous = priceHistory.length > 1 ? priceHistory[priceHistory.length - 2]! : null;
     const change = latest && previous ? latest.unit_price - previous.unit_price : null;
     const changePercent =
-      latest && previous && previous.unit_price !== 0 ? (change! / previous.unit_price) * 100 : null;
+      latest && previous && previous.unit_price !== 0
+        ? (change! / previous.unit_price) * 100
+        : null;
 
     const instrument: Instrument = {
       id: manualInstrument.id,
@@ -77,44 +96,80 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
           </Link>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-bold text-text-primary md:text-[30px]">{instrument.name}</h1>
-              <p className="text-sm text-text-secondary">投資信託（手入力） · {instrument.currency}</p>
+              <h1 className="text-2xl font-bold text-text-primary md:text-[30px]">
+                {instrument.name}
+              </h1>
+              <p className="text-sm text-text-secondary">
+                投資信託（手入力） · {instrument.currency}
+              </p>
             </div>
             <FavoriteToggle instrument={instrument} />
           </div>
-          <p className="text-xs text-text-muted">基準価額 更新日 {formatDate(latest?.price_date ?? null)}</p>
+          <p className="text-xs text-text-muted">
+            基準価額 更新日 {formatDate(latest?.price_date ?? null)}
+          </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          <MetricCard label="最新基準価額（1万口あたり）">
-            <MetricValue>
-              <CurrencyValue value={latest?.unit_price ?? null} currency={instrument.currency} />
-            </MetricValue>
-          </MetricCard>
-          <MetricCard label="前回更新比">
-            <MetricValue>
-              <PercentChange amount={change} percent={changePercent} />
-            </MetricValue>
-          </MetricCard>
-          <MetricCard label="更新回数">
-            <MetricValue>{priceHistory.length}回</MetricValue>
-          </MetricCard>
-        </div>
-
-        {dailyPrices.length >= 2 ? (
-          <PriceChart dailyPrices={dailyPrices} title={instrument.name} initialMode="line" />
-        ) : (
-          <div className="rounded-card border border-border bg-surface p-8 text-center text-sm text-text-secondary">
-            {dailyPrices.length === 0
-              ? "まだ基準価額の履歴がありません。ポートフォリオで基準価額を入力すると、ここに履歴が記録されます。"
-              : "基準価額の記録が1件のみのため、グラフはまだ表示できません。次回の更新で推移が表示されます。"}
-          </div>
-        )}
-
-        <div className="rounded-card border border-border bg-surface p-5 text-xs text-text-muted">
-          この銘柄はYahoo Financeにデータが無い投資信託のため、基準価額はポートフォリオ画面での手入力に基づきます。
-          自動更新は行われません。最終取得: {formatDateTime(latest?.fetched_at ?? null)}
-        </div>
+        <InstrumentDetailTabs
+          tabs={[
+            {
+              id: "overview",
+              label: "概要",
+              content: (
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                  <MetricCard label="最新基準価額（1万口あたり）">
+                    <MetricValue>
+                      <CurrencyValue
+                        value={latest?.unit_price ?? null}
+                        currency={instrument.currency}
+                      />
+                    </MetricValue>
+                  </MetricCard>
+                  <MetricCard label="前回更新比">
+                    <MetricValue>
+                      <PercentChange amount={change} percent={changePercent} />
+                    </MetricValue>
+                  </MetricCard>
+                  <MetricCard label="更新回数">
+                    <MetricValue>{priceHistory.length}回</MetricValue>
+                  </MetricCard>
+                </div>
+              ),
+            },
+            {
+              id: "chart",
+              label: "チャート",
+              content:
+                dailyPrices.length >= 2 ? (
+                  <PriceChart
+                    dailyPrices={dailyPrices}
+                    title={instrument.name}
+                    initialMode="line"
+                  />
+                ) : (
+                  <div className="rounded-card border border-border bg-surface p-8 text-center text-sm text-text-secondary">
+                    {dailyPrices.length === 0
+                      ? "まだ基準価額の履歴がありません。ポートフォリオで基準価額を入力すると、ここに履歴が記録されます。"
+                      : "基準価額の記録が1件のみのため、グラフはまだ表示できません。次回の更新で推移が表示されます。"}
+                  </div>
+                ),
+            },
+            {
+              id: "evidence",
+              label: "根拠資料",
+              content: (
+                <AnalyticsPanel title="データの出所">
+                  <p className="text-sm font-semibold text-text-primary">
+                    外部の自動取得データは未接続です。表示中の基準価額はあなたが入力した履歴です。
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-text-secondary">
+                    自動更新は行われません。最終取得: {formatDateTime(latest?.fetched_at ?? null)}
+                  </p>
+                </AnalyticsPanel>
+              ),
+            },
+          ]}
+        />
 
         <ManualFundPriceHistoryForm instrumentId={manualInstrument.id} />
       </div>
@@ -151,6 +206,8 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
     lastClose !== null && oneYearAgoClose !== null && oneYearAgoClose !== 0
       ? ((lastClose - oneYearAgoClose) / oneYearAgoClose) * 100
       : null;
+  const sampleResearchEnabled = isSampleResearchEnabled();
+  const outlook = sampleResearchEnabled ? getResearchOutlook(instrument.providerSymbol) : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -164,7 +221,9 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-text-primary md:text-[30px]">{instrument.name}</h1>
+            <h1 className="text-2xl font-bold text-text-primary md:text-[30px]">
+              {instrument.name}
+            </h1>
             <p className="text-sm text-text-secondary">
               {instrument.displaySymbol} · {instrument.exchange ?? "—"} · {instrument.currency}
             </p>
@@ -174,58 +233,132 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
         <p className="text-xs text-text-muted">価格基準日 {formatDate(quote?.priceDate ?? null)}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <MetricCard label="最新終値">
-          <MetricValue>
-            <CurrencyValue value={quote?.close ?? null} currency={instrument.currency} />
-          </MetricValue>
-        </MetricCard>
-        <MetricCard label="前営業日比">
-          <MetricValue>
-            <PercentChange amount={quote?.change ?? null} percent={quote?.changePercent ?? null} />
-          </MetricValue>
-        </MetricCard>
-        <MetricCard label="1年騰落率">
-          <MetricValue>{formatPercent(return1y)}</MetricValue>
-        </MetricCard>
-        <MetricCard label="配当利回り（予想）">
-          <MetricValue>
-            {quote?.dividendYield !== null && quote?.dividendYield !== undefined
-              ? `${quote.dividendYield.toFixed(2)}%`
-              : "—"}
-          </MetricValue>
-        </MetricCard>
-      </div>
+      <InstrumentDetailTabs
+        tabs={[
+          {
+            id: "overview",
+            label: "概要",
+            content: (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                  <MetricCard label="最新終値">
+                    <MetricValue>
+                      <CurrencyValue value={quote?.close ?? null} currency={instrument.currency} />
+                    </MetricValue>
+                  </MetricCard>
+                  <MetricCard label="前営業日比">
+                    <MetricValue>
+                      <PercentChange
+                        amount={quote?.change ?? null}
+                        percent={quote?.changePercent ?? null}
+                      />
+                    </MetricValue>
+                  </MetricCard>
+                  <MetricCard label="1年騰落率">
+                    <MetricValue>{formatPercent(return1y)}</MetricValue>
+                  </MetricCard>
+                  <MetricCard label="配当利回り（予想）">
+                    <MetricValue>
+                      {quote?.dividendYield !== null && quote?.dividendYield !== undefined
+                        ? `${quote.dividendYield.toFixed(2)}%`
+                        : "—"}
+                    </MetricValue>
+                  </MetricCard>
+                </div>
 
-      <PriceChart dailyPrices={dailyPrices} title={instrument.name} />
-
-      <div className="rounded-card border border-border bg-surface p-5">
-        <p className="mb-3 text-lg font-bold text-text-primary">指標</p>
-        <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-          <div>
-            <dt className="text-text-muted">配当利回り</dt>
-            <dd className="font-semibold text-text-primary">
-              {quote?.dividendYield !== null && quote?.dividendYield !== undefined
-                ? `${quote.dividendYield.toFixed(2)}%`
-                : "—"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-text-muted">PER</dt>
-            <dd className="font-semibold text-text-primary">
-              {quote?.trailingPE !== null && quote?.trailingPE !== undefined ? quote.trailingPE.toFixed(2) : "—"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-text-muted">通貨</dt>
-            <dd className="font-semibold text-text-primary">{instrument.currency}</dd>
-          </div>
-          <div>
-            <dt className="text-text-muted">取引所</dt>
-            <dd className="font-semibold text-text-primary">{instrument.exchange ?? "—"}</dd>
-          </div>
-        </dl>
-      </div>
+                <AnalyticsPanel title="指標">
+                  <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+                    <div>
+                      <dt className="text-text-muted">配当利回り</dt>
+                      <dd className="font-semibold text-text-primary">
+                        {quote?.dividendYield !== null && quote?.dividendYield !== undefined
+                          ? `${quote.dividendYield.toFixed(2)}%`
+                          : "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-text-muted">PER</dt>
+                      <dd className="font-semibold text-text-primary">
+                        {quote?.trailingPE !== null && quote?.trailingPE !== undefined
+                          ? quote.trailingPE.toFixed(2)
+                          : "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-text-muted">通貨</dt>
+                      <dd className="font-semibold text-text-primary">{instrument.currency}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-text-muted">取引所</dt>
+                      <dd className="font-semibold text-text-primary">
+                        {instrument.exchange ?? "—"}
+                      </dd>
+                    </div>
+                  </dl>
+                </AnalyticsPanel>
+              </div>
+            ),
+          },
+          {
+            id: "outlook",
+            label: "見通し",
+            content: <ResearchOutlookPanel outlook={outlook} />,
+          },
+          {
+            id: "chart-demand",
+            label: "チャート・需給",
+            content: (
+              <div className="space-y-4">
+                <PriceChart dailyPrices={dailyPrices} title={instrument.name} />
+                <UnavailableResearchPanel
+                  title="板・需給"
+                  description="リアルタイムの板情報と需給データは未接続です。現在は過去の価格チャートのみ確認できます。"
+                />
+              </div>
+            ),
+          },
+          {
+            id: "financials",
+            label: "決算・財務",
+            content: (
+              <UnavailableResearchPanel
+                title="決算・財務"
+                description="決算書と財務指標の実データは未接続です。接続後に更新日と対象期間を明示して表示します。"
+              />
+            ),
+          },
+          {
+            id: "competitors",
+            label: "競合比較",
+            content: (
+              <UnavailableResearchPanel
+                title="競合比較"
+                description="競合企業と業界比較の実データは未接続です。比較値は表示していません。"
+              />
+            ),
+          },
+          {
+            id: "statements",
+            label: "開示・発言",
+            content: (
+              <UnavailableResearchPanel
+                title="開示・発言"
+                description="適時開示、決算説明資料、経営者や投資家の発言データは未接続です。未確認の内容は表示していません。"
+              />
+            ),
+          },
+          {
+            id: "evidence",
+            label: "根拠資料",
+            content: (
+              <EvidenceCoveragePanel
+                dataKind={outlook?.dataKind ?? "unavailable"}
+                evidence={outlook?.evidence ?? []}
+              />
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

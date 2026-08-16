@@ -17,18 +17,29 @@ export function BasketIndexChart({ points }: { points: BasketIndexPoint[] }) {
     const container = containerRef.current;
     if (!container || container.clientWidth === 0 || points.length === 0) return;
 
+    const rootStyles = getComputedStyle(document.documentElement);
+    const token = (name: string) => rootStyles.getPropertyValue(name).trim();
+
     const chart = createChart(container, {
-      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#475569" },
-      grid: { vertLines: { color: "#e2e8f0" }, horzLines: { color: "#e2e8f0" } },
-      timeScale: { borderColor: "#e2e8f0" },
-      rightPriceScale: { borderColor: "#e2e8f0" },
+      layout: {
+        background: { type: ColorType.Solid, color: "transparent" },
+        textColor: token("--text-secondary"),
+      },
+      grid: {
+        vertLines: { color: token("--border") },
+        horzLines: { color: token("--border") },
+      },
+      timeScale: { borderColor: token("--border") },
+      rightPriceScale: { borderColor: token("--border") },
       width: container.clientWidth,
       height: 280,
     });
     chartRef.current = chart;
 
-    const series = chart.addLineSeries({ color: "#155eef", lineWidth: 2 });
-    series.setData(points.map((p) => ({ time: toTimestamp(p.date), value: Number(p.value.toFixed(2)) })));
+    const series = chart.addLineSeries({ color: token("--primary"), lineWidth: 2 });
+    series.setData(
+      points.map((p) => ({ time: toTimestamp(p.date), value: Number(p.value.toFixed(2)) }))
+    );
     chart.timeScale().fitContent();
 
     const resizeObserver = new ResizeObserver((entries) => {
@@ -49,7 +60,11 @@ export function BasketIndexChart({ points }: { points: BasketIndexPoint[] }) {
       <p className="mb-3 text-lg font-bold text-text-primary">
         お気に入り銘柄の長期推移（開始時点=100）
       </p>
-      {points.length === 0 ? <ChartEmptyState /> : <div ref={containerRef} className="h-[280px] w-full" />}
+      {points.length === 0 ? (
+        <ChartEmptyState />
+      ) : (
+        <div ref={containerRef} className="h-[280px] w-full" />
+      )}
     </div>
   );
 }
