@@ -389,7 +389,28 @@ export interface Database {
           id: string;
           user_id: string;
           instrument_id: string;
-          metric_key: string;
+          metric_key:
+            | "revenue"
+            | "operating_income"
+            | "net_income"
+            | "eps"
+            | "fcf"
+            | "cash"
+            | "debt"
+            | "roe"
+            | "roic"
+            | "operating_margin"
+            | "net_margin"
+            | "per"
+            | "pbr"
+            | "ev_ebitda"
+            | "dividend_yield"
+            | "dividend_payout"
+            | "current_ratio"
+            | "net_debt"
+            | "net_debt_ebitda"
+            | "fcf_yield"
+            | "fcf_margin";
           value: number;
           unit: string | null;
           currency: "JPY" | "USD" | null;
@@ -503,6 +524,7 @@ export interface Database {
           target_price: number | null;
           published_at: string | null;
           source_id: string | null;
+          source_report_id: string | null;
           source_url: string | null;
           reliability: "low" | "medium" | "high" | null;
           created_at: string;
@@ -523,6 +545,13 @@ export interface Database {
             columns: ["source_id"];
             isOneToOne: false;
             referencedRelation: "research_sources";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "research_opinions_source_report_id_fkey";
+            columns: ["source_report_id"];
+            isOneToOne: false;
+            referencedRelation: "research_reports";
             referencedColumns: ["id"];
           },
         ];
@@ -593,6 +622,7 @@ export interface Database {
           severity: "low" | "medium" | "high" | null;
           likelihood: "low" | "medium" | "high" | null;
           source_id: string | null;
+          source_report_id: string | null;
           detected_at: string | null;
           created_at: string;
         };
@@ -612,6 +642,13 @@ export interface Database {
             columns: ["source_id"];
             isOneToOne: false;
             referencedRelation: "research_sources";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "company_risks_source_report_id_fkey";
+            columns: ["source_report_id"];
+            isOneToOne: false;
+            referencedRelation: "research_reports";
             referencedColumns: ["id"];
           },
         ];

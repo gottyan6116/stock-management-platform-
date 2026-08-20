@@ -143,6 +143,7 @@ export interface ResearchOpinion {
   targetPrice: number | null;
   publishedAt: string | null;
   sourceId: string | null;
+  sourceReportId: string | null;
   sourceUrl: string | null;
   reliability: ConfidenceLevel | null;
   createdAt: string;
@@ -168,6 +169,7 @@ export interface CompanyRisk {
   severity: ConfidenceLevel | null;
   likelihood: ConfidenceLevel | null;
   sourceId: string | null;
+  sourceReportId: string | null;
   detectedAt: string | null;
   createdAt: string;
 }

@@ -6,7 +6,7 @@ describe("ResearchImportSchema", () => {
     const result = ResearchImportSchema.safeParse({
       company: { ticker: "6758", name: "Sony Group", exchange: "TSE" },
       researchDate: "2026-08-20",
-      sources: [{ sourceType: "chatgpt", sourceName: "ChatGPT Deep Research" }],
+      sources: [{ sourceKey: "chatgpt-research", sourceType: "chatgpt", sourceName: "ChatGPT Deep Research" }],
       financials: [],
       managementStatements: [],
       catalysts: [],
@@ -23,10 +23,16 @@ describe("ResearchImportSchema", () => {
       company: { ticker: "6758", name: "Sony Group", exchange: "TSE" },
       researchDate: "2026-08-20",
       sources: [
-        { sourceType: "official_ir", sourceName: "FY2026 Q2 Earnings Presentation", sourceUrl: "https://example.com/ir" },
+        {
+          sourceKey: "ir-q2-2026",
+          sourceType: "official_ir",
+          sourceName: "FY2026 Q2 Earnings Presentation",
+          sourceUrl: "https://example.com/ir",
+        },
       ],
       financials: [
         {
+          sourceKey: "ir-q2-2026",
           metricKey: "operating_margin",
           value: 12.4,
           unit: "percent",
@@ -37,6 +43,7 @@ describe("ResearchImportSchema", () => {
       ],
       managementStatements: [
         {
+          sourceKey: "ir-q2-2026",
           personName: "Kenichiro Yoshida",
           role: "CEO",
           statement: "We expect the semiconductor segment to sustain double-digit margin growth.",
@@ -128,6 +135,92 @@ describe("ResearchImportSchema", () => {
       investorOpinions: [],
       events: [],
       summary: "",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an evidence item that references an unknown sourceKey", () => {
+    const result = ResearchImportSchema.safeParse({
+      company: { ticker: "6758", name: "Sony Group", exchange: "TSE" },
+      researchDate: "2026-08-20",
+      sources: [{ sourceKey: "ir-q2-2026", sourceType: "official_ir", sourceName: "FY2026 Q2 Earnings" }],
+      financials: [
+        {
+          sourceKey: "does-not-exist",
+          metricKey: "revenue",
+          value: 1000,
+          periodType: "FY",
+          periodStart: "2026-04-01",
+          periodEnd: "2027-03-31",
+        },
+      ],
+      managementStatements: [],
+      catalysts: [],
+      risks: [],
+      investorOpinions: [],
+      events: [],
+      summary: "x",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.path.join(".") === "financials.0.sourceKey")).toBe(true);
+    }
+  });
+
+  it("rejects duplicate sourceKey values within sources", () => {
+    const result = ResearchImportSchema.safeParse({
+      company: { ticker: "6758", name: "Sony Group", exchange: "TSE" },
+      researchDate: "2026-08-20",
+      sources: [
+        { sourceKey: "dup", sourceType: "chatgpt", sourceName: "ChatGPT" },
+        { sourceKey: "dup", sourceType: "claude", sourceName: "Claude" },
+      ],
+      financials: [],
+      managementStatements: [],
+      catalysts: [],
+      risks: [],
+      investorOpinions: [],
+      events: [],
+      summary: "x",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts an evidenceClass on a source", () => {
+    const result = ResearchImportSchema.safeParse({
+      company: { ticker: "6758", name: "Sony Group", exchange: "TSE" },
+      researchDate: "2026-08-20",
+      sources: [
+        {
+          sourceKey: "chatgpt-research",
+          sourceType: "chatgpt",
+          sourceName: "ChatGPT Deep Research",
+          evidenceClass: "ai_interpretation",
+        },
+      ],
+      financials: [],
+      managementStatements: [],
+      catalysts: [],
+      risks: [],
+      investorOpinions: [],
+      events: [],
+      summary: "x",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an invalid calendar date (February 31st)", () => {
+    const result = ResearchImportSchema.safeParse({
+      company: { ticker: "6758", name: "Sony Group", exchange: "TSE" },
+      researchDate: "2026-02-31",
+      sources: [],
+      financials: [],
+      managementStatements: [],
+      catalysts: [],
+      risks: [],
+      investorOpinions: [],
+      events: [],
+      summary: "x",
     });
     expect(result.success).toBe(false);
   });

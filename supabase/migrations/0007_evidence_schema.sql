@@ -1,7 +1,7 @@
 -- 0007: Investment Intelligence — Evidence DB
 -- 外部AI（ChatGPT/Claude/Gemini/Perplexity等）やIR資料から調査した情報を
 -- 構造化して保存する。Research AI（情報収集）と Cloudflare AI（最終分析）を分離する
--- Import-First アーキテクチャの土台（docs/spec/investment_intelligence_import_first_spec.md）。
+-- Import-First アーキテクチャの土台（docs/superpowers/plans/2026-08-20-investment-intelligence-p1-evidence-schema.md）。
 -- すべてのテーブルは user_id で所有者分離し、RLSは0005と同じ auth.uid() = user_id パターンを使う
 -- （0003で判明した通り、新しいAPIキー認証モードでは `to authenticated` ロールベースのポリシーは
 --  黙って0件を返すため使わない）。
@@ -28,6 +28,7 @@ create index if not exists research_sources_user_instrument_idx
   on public.research_sources (user_id, instrument_id);
 
 alter table public.research_sources enable row level security;
+drop policy if exists "users manage own research sources" on public.research_sources;
 create policy "users manage own research sources"
 on public.research_sources for all
 using (auth.uid() = user_id)
@@ -53,16 +54,26 @@ create index if not exists research_reports_user_instrument_idx
   on public.research_reports (user_id, instrument_id);
 
 alter table public.research_reports enable row level security;
+drop policy if exists "users manage own research reports" on public.research_reports;
 create policy "users manage own research reports"
 on public.research_reports for all
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
+-- financial_metricsは意図的にappend-only（同一期間の重複インポートを妨げるunique制約を持たない）。
+-- 同じ期間でも複数ソースからの観測値や後日の修正値が併存しうるため、
+-- 「どの値を採用するか」はスコアリング層（Phase P5）の責務とする。
 create table if not exists public.financial_metrics (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   instrument_id uuid not null references public.instruments(id) on delete cascade,
-  metric_key text not null,
+  metric_key text not null check (
+    metric_key in (
+      'revenue', 'operating_income', 'net_income', 'eps', 'fcf', 'cash', 'debt', 'roe', 'roic',
+      'operating_margin', 'net_margin', 'per', 'pbr', 'ev_ebitda', 'dividend_yield', 'dividend_payout',
+      'current_ratio', 'net_debt', 'net_debt_ebitda', 'fcf_yield', 'fcf_margin'
+    )
+  ),
   value numeric not null,
   unit text,
   currency text check (currency in ('JPY', 'USD')),
@@ -80,6 +91,7 @@ create index if not exists financial_metrics_user_instrument_idx
   on public.financial_metrics (user_id, instrument_id, metric_key);
 
 alter table public.financial_metrics enable row level security;
+drop policy if exists "users manage own financial metrics" on public.financial_metrics;
 create policy "users manage own financial metrics"
 on public.financial_metrics for all
 using (auth.uid() = user_id)
@@ -110,6 +122,7 @@ create index if not exists management_statements_user_instrument_idx
   on public.management_statements (user_id, instrument_id);
 
 alter table public.management_statements enable row level security;
+drop policy if exists "users manage own management statements" on public.management_statements;
 create policy "users manage own management statements"
 on public.management_statements for all
 using (auth.uid() = user_id)
@@ -127,6 +140,7 @@ create table if not exists public.research_opinions (
   target_price numeric,
   published_at date,
   source_id uuid references public.research_sources(id) on delete set null,
+  source_report_id uuid references public.research_reports(id) on delete set null,
   source_url text,
   reliability text check (reliability in ('low', 'medium', 'high')),
   created_at timestamptz not null default now()
@@ -136,6 +150,7 @@ create index if not exists research_opinions_user_instrument_idx
   on public.research_opinions (user_id, instrument_id);
 
 alter table public.research_opinions enable row level security;
+drop policy if exists "users manage own research opinions" on public.research_opinions;
 create policy "users manage own research opinions"
 on public.research_opinions for all
 using (auth.uid() = user_id)
@@ -164,6 +179,7 @@ create index if not exists company_events_user_instrument_idx
   on public.company_events (user_id, instrument_id, event_date desc);
 
 alter table public.company_events enable row level security;
+drop policy if exists "users manage own company events" on public.company_events;
 create policy "users manage own company events"
 on public.company_events for all
 using (auth.uid() = user_id)
@@ -178,6 +194,7 @@ create table if not exists public.company_risks (
   severity text check (severity in ('low', 'medium', 'high')),
   likelihood text check (likelihood in ('low', 'medium', 'high')),
   source_id uuid references public.research_sources(id) on delete set null,
+  source_report_id uuid references public.research_reports(id) on delete set null,
   detected_at date,
   created_at timestamptz not null default now()
 );
@@ -186,6 +203,7 @@ create index if not exists company_risks_user_instrument_idx
   on public.company_risks (user_id, instrument_id);
 
 alter table public.company_risks enable row level security;
+drop policy if exists "users manage own company risks" on public.company_risks;
 create policy "users manage own company risks"
 on public.company_risks for all
 using (auth.uid() = user_id)
@@ -208,6 +226,7 @@ create index if not exists company_catalysts_user_instrument_idx
   on public.company_catalysts (user_id, instrument_id);
 
 alter table public.company_catalysts enable row level security;
+drop policy if exists "users manage own company catalysts" on public.company_catalysts;
 create policy "users manage own company catalysts"
 on public.company_catalysts for all
 using (auth.uid() = user_id)
@@ -232,10 +251,11 @@ create table if not exists public.analysis_runs (
   created_at timestamptz not null default now()
 );
 
-create index if not exists analysis_runs_instrument_created_idx
-  on public.analysis_runs (instrument_id, created_at desc);
+create index if not exists analysis_runs_user_instrument_created_idx
+  on public.analysis_runs (user_id, instrument_id, created_at desc);
 
 alter table public.analysis_runs enable row level security;
+drop policy if exists "users manage own analysis runs" on public.analysis_runs;
 create policy "users manage own analysis runs"
 on public.analysis_runs for all
 using (auth.uid() = user_id)
