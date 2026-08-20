@@ -26,3 +26,6 @@ npm-debug.log*
 # supabase
 /supabase/.branches
 /supabase/.temp
+
+# worktrees (used for isolated agent sessions)
+/.worktrees
