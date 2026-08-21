@@ -9,6 +9,9 @@ import type {
 import type { ResearchReportSummary } from "@/server/repositories/evidence-repository";
 import type { Market, Currency } from "@/types/domain";
 
+// CompanySnapshot/MarketSnapshotはsrc/types/domain.tsのInstrument/Quoteと似ているが、
+// あえて別型として定義している。evidenceパケットの形をmarket-dataドメイン型の変化から
+// 切り離すため（呼び出し側がInstrument/Quoteからこの形へ詰め替える想定）。
 export interface CompanySnapshot {
   instrumentId: string;
   providerSymbol: string;
@@ -34,6 +37,7 @@ export interface MarketSnapshot {
 export interface DataCoverage {
   financials: number;
   management: number;
+  catalysts: number;
   risks: number;
   events: number;
   opinions: number;
@@ -78,12 +82,14 @@ function coverageOf(count: number): number {
 function computeDataCoverage(input: BuildEvidenceInput): DataCoverage {
   const financials = coverageOf(input.financials.length);
   const management = coverageOf(input.managementStatements.length);
+  const catalysts = coverageOf(input.catalysts.length);
   const risks = coverageOf(input.risks.length);
   const events = coverageOf(input.events.length);
   const opinions = coverageOf(input.opinions.length);
   const research = coverageOf(input.research.length);
-  const overall = (financials + management + risks + events + opinions + research) / 6;
-  return { financials, management, risks, events, opinions, research, overall };
+  const categories = [financials, management, catalysts, risks, events, opinions, research];
+  const overall = categories.reduce((sum, value) => sum + value, 0) / categories.length;
+  return { financials, management, catalysts, risks, events, opinions, research, overall };
 }
 
 /** 銘柄1件分の全evidenceを1つのパケットに組み立てる純粋関数。DBアクセスは呼び出し側の責務。 */

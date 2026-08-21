@@ -74,12 +74,35 @@ describe("buildInvestmentEvidence", () => {
     expect(evidence.dataCoverage).toEqual({
       financials: 0,
       management: 0,
+      catalysts: 0,
       risks: 0,
       events: 0,
       opinions: 0,
       research: 0,
       overall: 0,
     });
+  });
+
+  it("reports full coverage for catalysts specifically (regression: catalysts must count toward overall)", () => {
+    const evidence = buildInvestmentEvidence({
+      ...emptyEvidenceInputs(),
+      catalysts: [
+        {
+          id: "c1",
+          instrumentId: "inst-1",
+          catalystType: "product",
+          description: "New sensor launch",
+          expectedTiming: "2026 Q4",
+          impact: "high",
+          sourceId: null,
+          sourceReportId: null,
+          createdAt: "2026-08-20T00:00:00Z",
+        },
+      ],
+    });
+    expect(evidence.dataCoverage.catalysts).toBe(1);
+    expect(evidence.dataCoverage.financials).toBe(0);
+    expect(evidence.dataCoverage.overall).toBeCloseTo(1 / 7, 5);
   });
 
   it("reports full coverage for a category with at least one entry, without inflating others", () => {
@@ -102,10 +125,10 @@ describe("buildInvestmentEvidence", () => {
     });
     expect(evidence.dataCoverage.risks).toBe(1);
     expect(evidence.dataCoverage.financials).toBe(0);
-    expect(evidence.dataCoverage.overall).toBeCloseTo(1 / 6, 5);
+    expect(evidence.dataCoverage.overall).toBeCloseTo(1 / 7, 5);
   });
 
-  it("computes overall coverage as the mean of the six category scores", () => {
+  it("computes overall coverage as the mean of the seven category scores", () => {
     const evidence = buildInvestmentEvidence({
       ...emptyEvidenceInputs(),
       financials: [
@@ -143,6 +166,6 @@ describe("buildInvestmentEvidence", () => {
     expect(evidence.dataCoverage.financials).toBe(1);
     expect(evidence.dataCoverage.events).toBe(1);
     expect(evidence.dataCoverage.management).toBe(0);
-    expect(evidence.dataCoverage.overall).toBeCloseTo(2 / 6, 5);
+    expect(evidence.dataCoverage.overall).toBeCloseTo(2 / 7, 5);
   });
 });
