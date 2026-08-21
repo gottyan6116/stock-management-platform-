@@ -38,7 +38,7 @@ Respond with ONLY a single JSON object, no markdown code fences, no explanation 
 }`;
 }
 
-function summarizeList(label: string, items: readonly unknown[], render: (item: any) => string): string {
+function summarizeList<T>(label: string, items: readonly T[], render: (item: T) => string): string {
   if (items.length === 0) return `${label}: no data`;
   return `${label} (${items.length}):\n` + items.map((item) => `- ${render(item)}`).join("\n");
 }

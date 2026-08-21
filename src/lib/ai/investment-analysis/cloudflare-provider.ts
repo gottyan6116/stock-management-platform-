@@ -36,7 +36,13 @@ export class CloudflareWorkersAIProvider implements InvestmentAnalysisProvider {
           { role: "system", content: buildSystemPrompt() },
           { role: "user", content: buildUserPrompt(evidence, quantScore) },
         ],
+        // 既定値（多くのモデルで256程度）だと本スキーマの出力が途中で切れてJSONとして壊れるため、
+        // 14フィールド分の構造化出力に十分な長さを明示する。
+        max_tokens: 4000,
       }),
+      // 大規模モデルの生成は数十秒かかることがあるため、市場データAPI用のPROVIDER_TIMEOUT_MS(短め)とは
+      // 別に、この呼び出し専用の長めのタイムアウトを設定する。
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!res.ok) {
