@@ -3,7 +3,13 @@ import type { Database } from "@/types/supabase";
 import type { ResearchImportInput } from "@/lib/evidence/schemas";
 
 type ResearchReportRow = Database["public"]["Tables"]["research_reports"]["Row"];
-type ResearchSourceInsert = Database["public"]["Tables"]["research_sources"]["Insert"];
+
+// PostgRESTの配列（複数行）insertは、行オブジェクトに存在するキー（値がundefinedでも）を
+// すべて ?columns= に含めてしまい、そのキーはbodyから省略されるため、DBはNULLを受け取り
+// column defaultをバイパスする（単一行insertはこの経路を通らないため影響しない）。
+// { defaultToNull: false } を付けると Prefer: missing=default が送られ、
+// 省略されたキーにcolumn defaultが正しく適用される。P3以降で配列insertを追加する際も必ず付けること。
+const BULK_INSERT_OPTIONS = { defaultToNull: false } as const;
 
 export interface ResearchReportSummary {
   id: string;
@@ -72,33 +78,27 @@ export async function insertJsonImport(
 ): Promise<{ reportId: string; sourcesCreated: number }> {
   const sourceKeyToId = new Map<string, string>();
 
-  if (input.sources.length > 0) {
-    const sourceRows: ResearchSourceInsert[] = input.sources.map((source) => ({
-      user_id: userId,
-      instrument_id: instrumentId,
-      source_type: source.sourceType,
-      source_name: source.sourceName,
-      source_url: source.sourceUrl,
-      // PostgRESTの配列（複数行）insertはomittedキーにcolumn defaultを適用せずnullを送るため
-      // （単一行insertとは挙動が異なる既知の癖）、evidence_classはDB defaultの'fact'を明示する。
-      evidence_class: source.evidenceClass ?? "fact",
-      reliability: source.reliability,
-    }));
-    // sourceKeyはDBへ保存しないため、insert結果の行順が入力配列の順と一致することに依存して
-    // sourceKey→idを対応付ける。単一INSERT...VALUES...RETURNINGは常に指定順で行を返す
-    // （PostgreSQLの保証。トリガーや分割INSERTを追加する場合はこの前提が崩れるため要注意）。
-    const { data: insertedSources, error: sourcesError } = await supabase
+  // sourcesは通常1〜数件程度のため、順序依存の一括insertではなく1件ずつ単一行insertする
+  // （sourceKey→idの対応付けを行順序の暗黙的な保証に頼らないため）。
+  for (const source of input.sources) {
+    const { data: insertedSource, error: sourceError } = await supabase
       .from("research_sources")
-      .insert(sourceRows)
-      .select("id");
-    if (sourcesError) throw sourcesError;
-    insertedSources.forEach((row, index) => {
-      const sourceKey = input.sources[index]?.sourceKey;
-      if (sourceKey) sourceKeyToId.set(sourceKey, row.id);
-    });
+      .insert({
+        user_id: userId,
+        instrument_id: instrumentId,
+        source_type: source.sourceType,
+        source_name: source.sourceName,
+        source_url: source.sourceUrl,
+        evidence_class: source.evidenceClass ?? "fact",
+        reliability: source.reliability,
+      })
+      .select("id")
+      .single();
+    if (sourceError) throw sourceError;
+    sourceKeyToId.set(source.sourceKey, insertedSource.id);
   }
 
-  const primarySourceId = input.sources.length > 0 ? (sourceKeyToId.values().next().value ?? null) : null;
+  const primarySourceId = input.sources.length > 0 ? (sourceKeyToId.get(input.sources[0]!.sourceKey) ?? null) : null;
 
   const { data: report, error: reportError } = await supabase
     .from("research_reports")
@@ -134,7 +134,8 @@ export async function insertJsonImport(
         source_id: resolveSourceId(metric.sourceKey),
         source_report_id: report.id,
         is_manual: false,
-      }))
+      })),
+      BULK_INSERT_OPTIONS
     );
     if (error) throw error;
   }
@@ -153,7 +154,8 @@ export async function insertJsonImport(
         confidence: statement.confidence,
         source_id: resolveSourceId(statement.sourceKey),
         source_report_id: report.id,
-      }))
+      })),
+      BULK_INSERT_OPTIONS
     );
     if (error) throw error;
   }
@@ -169,7 +171,8 @@ export async function insertJsonImport(
         impact: catalyst.impact,
         source_id: resolveSourceId(catalyst.sourceKey),
         source_report_id: report.id,
-      }))
+      })),
+      BULK_INSERT_OPTIONS
     );
     if (error) throw error;
   }
@@ -186,7 +189,8 @@ export async function insertJsonImport(
         detected_at: risk.detectedAt,
         source_id: resolveSourceId(risk.sourceKey),
         source_report_id: report.id,
-      }))
+      })),
+      BULK_INSERT_OPTIONS
     );
     if (error) throw error;
   }
@@ -206,7 +210,8 @@ export async function insertJsonImport(
         source_url: opinion.sourceUrl,
         source_id: resolveSourceId(opinion.sourceKey),
         source_report_id: report.id,
-      }))
+      })),
+      BULK_INSERT_OPTIONS
     );
     if (error) throw error;
   }
@@ -222,7 +227,8 @@ export async function insertJsonImport(
         event_date: event.eventDate,
         source_id: resolveSourceId(event.sourceKey),
         source_report_id: report.id,
-      }))
+      })),
+      BULK_INSERT_OPTIONS
     );
     if (error) throw error;
   }

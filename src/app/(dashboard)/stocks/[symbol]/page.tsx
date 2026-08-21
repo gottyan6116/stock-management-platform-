@@ -56,7 +56,10 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
   ).catch(() => null);
 
   if (manualInstrument) {
-    const priceHistory = await listManualFundPrices(supabase, manualInstrument.id).catch(() => []);
+    const [priceHistory, manualResearchReports] = await Promise.all([
+      listManualFundPrices(supabase, manualInstrument.id).catch(() => []),
+      listResearchReports(supabase, manualInstrument.id).catch(() => []),
+    ]);
     const dailyPrices: DailyPrice[] = priceHistory.map((row) => ({
       tradingDate: row.price_date,
       open: row.unit_price,
@@ -66,8 +69,6 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
       adjustedClose: row.unit_price,
       volume: null,
     }));
-
-    const manualResearchReports = await listResearchReports(supabase, manualInstrument.id).catch(() => []);
 
     const latest = priceHistory.at(-1) ?? null;
     const previous = priceHistory.length > 1 ? priceHistory[priceHistory.length - 2]! : null;

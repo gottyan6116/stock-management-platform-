@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { apiError } from "@/lib/errors/api-error";
 import { resolveOrCreateInstrument } from "@/server/services/resolve-instrument";
+import { findInstrumentByProviderSymbol } from "@/server/repositories/instruments-repository";
 import { insertPasteReport, insertJsonImport } from "@/server/repositories/evidence-repository";
 import { ResearchImportSchema } from "@/lib/evidence/schemas";
 
@@ -28,7 +29,7 @@ const pasteRequestSchema = z.object({
   sourceType: sourceTypeSchema,
   sourceUrl: z.string().url().optional(),
   researchModel: z.string().trim().min(1).optional(),
-  rawContent: z.string().trim().min(1, "本文を入力してください。"),
+  rawContent: z.string().trim().min(1, "本文を入力してください。").max(200_000, "本文は20万文字以内で入力してください。"),
   userNotes: z.string().trim().min(1).optional(),
 });
 
@@ -51,7 +52,16 @@ export async function POST(request: NextRequest) {
   const parsed = requestSchema.safeParse(body);
   if (!parsed.success) return apiError("INVALID_REQUEST", parsed.error.issues[0]?.message);
 
-  const instrument = await resolveOrCreateInstrument(parsed.data.providerSymbol).catch(() => null);
+  // 手入力ファンド（provider='manual'）は大文字小文字を区別する生のprovider_symbolで登録されており、
+  // resolveOrCreateInstrumentはprovider='yahoo'固定・シンボルを大文字化してしまうため一致しない
+  // （ページ側の同種のコメント参照）。先にmanual instrumentとして検索し、無ければYahoo解決にフォールバックする。
+  const manualInstrument = await findInstrumentByProviderSymbol(
+    supabase,
+    parsed.data.providerSymbol,
+    "manual"
+  ).catch(() => null);
+  const instrument =
+    manualInstrument ?? (await resolveOrCreateInstrument(parsed.data.providerSymbol).catch(() => null));
   if (!instrument) return apiError("NOT_FOUND", "指定された銘柄が見つかりませんでした。");
 
   try {

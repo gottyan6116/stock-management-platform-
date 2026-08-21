@@ -173,14 +173,16 @@ export const ResearchImportSchema = z
       exchange: z.string().trim().min(1, "company.exchange is required"),
     }),
     researchDate: isoDateSchema,
-    sources: z.array(SourceSchema),
-    financials: z.array(FinancialMetricInputSchema),
+    sources: z.array(SourceSchema).max(50, "sources must not exceed 50 entries"),
+    financials: z.array(FinancialMetricInputSchema).max(200, "financials must not exceed 200 entries"),
     valuation: z.record(z.string(), z.unknown()).optional(),
-    managementStatements: z.array(ManagementStatementInputSchema),
-    catalysts: z.array(CatalystInputSchema),
-    risks: z.array(RiskInputSchema),
-    investorOpinions: z.array(ExternalOpinionInputSchema),
-    events: z.array(EventInputSchema),
+    managementStatements: z
+      .array(ManagementStatementInputSchema)
+      .max(200, "managementStatements must not exceed 200 entries"),
+    catalysts: z.array(CatalystInputSchema).max(200, "catalysts must not exceed 200 entries"),
+    risks: z.array(RiskInputSchema).max(200, "risks must not exceed 200 entries"),
+    investorOpinions: z.array(ExternalOpinionInputSchema).max(200, "investorOpinions must not exceed 200 entries"),
+    events: z.array(EventInputSchema).max(200, "events must not exceed 200 entries"),
     summary: z.string().trim().min(1, "summary is required"),
   })
   .superRefine((data, ctx) => {
