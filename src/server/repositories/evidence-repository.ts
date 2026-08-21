@@ -315,3 +315,83 @@ export async function listFinancialMetrics(
   if (error) throw error;
   return data ?? [];
 }
+
+type ManagementStatementRow = Database["public"]["Tables"]["management_statements"]["Row"];
+type CompanyCatalystRow = Database["public"]["Tables"]["company_catalysts"]["Row"];
+type CompanyRiskRow = Database["public"]["Tables"]["company_risks"]["Row"];
+type CompanyEventRow = Database["public"]["Tables"]["company_events"]["Row"];
+type ResearchOpinionRow = Database["public"]["Tables"]["research_opinions"]["Row"];
+
+/** 銘柄に紐づく経営者・投資家発言を発言日の新しい順で返す（発言日未設定はcreated_atで補完）。 */
+export async function listManagementStatements(
+  supabase: SupabaseClient<Database>,
+  instrumentId: string
+): Promise<ManagementStatementRow[]> {
+  const { data, error } = await supabase
+    .from("management_statements")
+    .select("*")
+    .eq("instrument_id", instrumentId)
+    .order("statement_date", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** 銘柄に紐づくカタリスト（好材料）を登録日の新しい順で返す。 */
+export async function listCompanyCatalysts(
+  supabase: SupabaseClient<Database>,
+  instrumentId: string
+): Promise<CompanyCatalystRow[]> {
+  const { data, error } = await supabase
+    .from("company_catalysts")
+    .select("*")
+    .eq("instrument_id", instrumentId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** 銘柄に紐づくリスクを検知日の新しい順で返す（検知日未設定はcreated_atで補完）。 */
+export async function listCompanyRisks(
+  supabase: SupabaseClient<Database>,
+  instrumentId: string
+): Promise<CompanyRiskRow[]> {
+  const { data, error } = await supabase
+    .from("company_risks")
+    .select("*")
+    .eq("instrument_id", instrumentId)
+    .order("detected_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** 銘柄に紐づくイベント（決算・M&A等）をイベント日の新しい順で返す。 */
+export async function listCompanyEvents(
+  supabase: SupabaseClient<Database>,
+  instrumentId: string
+): Promise<CompanyEventRow[]> {
+  const { data, error } = await supabase
+    .from("company_events")
+    .select("*")
+    .eq("instrument_id", instrumentId)
+    .order("event_date", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** 銘柄に紐づく投資家・アナリスト意見を公表日の新しい順で返す（公表日未設定はcreated_atで補完）。 */
+export async function listResearchOpinions(
+  supabase: SupabaseClient<Database>,
+  instrumentId: string
+): Promise<ResearchOpinionRow[]> {
+  const { data, error } = await supabase
+    .from("research_opinions")
+    .select("*")
+    .eq("instrument_id", instrumentId)
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
