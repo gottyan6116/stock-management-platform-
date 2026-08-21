@@ -15,18 +15,28 @@ export interface QuantScoreBreakdown {
   shareholderReturn: CategoryScore;
   total: number | null;
   maxTotal: number;
+  // totalが実際に採点できたカテゴリの満点合計（scoreがnullのカテゴリのmaxScoreは含まない）。
+  // maxTotal（常に70）に対してtotalを解釈すると、データが少ないほど不当に低スコアに見える
+  // （missing != 0の原則が分母側で破られる）ため、consumer側はtotal/scoredMaxTotalで
+  // 「採点できた範囲内での相対評価」を、total/maxTotalで「全体カバレッジ込みの絶対評価」を
+  // 使い分けられるようにする。
+  scoredMaxTotal: number | null;
 }
 
-/** 指定したmetric_keyの中で最新期末日のFinancialMetricを返す（同一期末日が複数あれば最初に見つかったもの）。 */
-function latestMetric(financials: FinancialMetric[], key: MetricKey): FinancialMetric | null {
-  const matches = financials.filter((m) => m.metricKey === key);
+/**
+ * 指定したmetric_keyの中で最新期末日のFinancialMetricを返す（同一期末日が複数あれば最初に見つかったもの）。
+ * periodTypeで絞り込む（既定FY）— 四半期値と通期値は水準が異なるため混在させない
+ * （例: 四半期ROEは通期の約1/4になり得るなど、期間タイプをまたぐ比較は指標を歪める）。
+ */
+function latestMetric(financials: FinancialMetric[], key: MetricKey, periodType: "FY" | "Q" = "FY"): FinancialMetric | null {
+  const matches = financials.filter((m) => m.metricKey === key && m.periodType === periodType);
   if (matches.length === 0) return null;
   return matches.reduce((a, b) => (a.periodEnd >= b.periodEnd ? a : b));
 }
 
-/** 直近2つの異なる期末日のYoY成長率(%)。データ不足（異なる期が2件未満）ならnull。 */
-function yoyGrowthPercent(financials: FinancialMetric[], key: MetricKey): number | null {
-  const matches = financials.filter((m) => m.metricKey === key);
+/** 直近2つの異なる期末日（同一periodType、既定FY）のYoY成長率(%)。データ不足（異なる期が2件未満）ならnull。 */
+function yoyGrowthPercent(financials: FinancialMetric[], key: MetricKey, periodType: "FY" | "Q" = "FY"): number | null {
+  const matches = financials.filter((m) => m.metricKey === key && m.periodType === periodType);
   const distinctPeriods = Array.from(new Set(matches.map((m) => m.periodEnd))).sort();
   if (distinctPeriods.length < 2) return null;
   const latestPeriod = distinctPeriods[distinctPeriods.length - 1]!;
@@ -49,6 +59,10 @@ interface SubMetricSpec {
   low: number;
   high: number;
   invert?: boolean;
+  // PER/PBR等、0以下は「割安」ではなく「赤字/債務超過で評価不能」を意味する指標向け。
+  // invert指標にclampを先にかけると負値がlow未満→0→反転で満点になってしまうため、
+  // そのような指標は正の値のときだけスコア対象にする（missing != 0を守る）。
+  skipIfNonPositive?: boolean;
 }
 
 /**
@@ -62,6 +76,7 @@ function categoryScore(financials: FinancialMetric[], specs: SubMetricSpec[], ma
   for (const spec of specs) {
     const metric = latestMetric(financials, spec.key);
     if (!metric) continue;
+    if (spec.skipIfNonPositive && metric.value <= 0) continue;
     fractions.push(normalize(metric.value, spec.low, spec.high, spec.invert));
     details.push(`${spec.key}=${metric.value}`);
   }
@@ -124,8 +139,8 @@ export function computeQuantScore(financials: FinancialMetric[]): QuantScoreBrea
   const valuation = categoryScore(
     financials,
     [
-      { key: "per", low: 10, high: 30, invert: true },
-      { key: "pbr", low: 0.5, high: 3, invert: true },
+      { key: "per", low: 10, high: 30, invert: true, skipIfNonPositive: true },
+      { key: "pbr", low: 0.5, high: 3, invert: true, skipIfNonPositive: true },
     ],
     VALUATION_MAX
   );
@@ -134,6 +149,7 @@ export function computeQuantScore(financials: FinancialMetric[]): QuantScoreBrea
   const categories = [growth, profitability, financialHealth, cashFlow, valuation, shareholderReturn];
   const scored = categories.filter((c): c is CategoryScore & { score: number } => c.score !== null);
   const total = scored.length > 0 ? scored.reduce((sum, c) => sum + c.score, 0) : null;
+  const scoredMaxTotal = scored.length > 0 ? scored.reduce((sum, c) => sum + c.maxScore, 0) : null;
 
   return {
     growth,
@@ -144,5 +160,6 @@ export function computeQuantScore(financials: FinancialMetric[]): QuantScoreBrea
     shareholderReturn,
     total,
     maxTotal: GROWTH_MAX + PROFITABILITY_MAX + FINANCIAL_HEALTH_MAX + CASH_FLOW_MAX + VALUATION_MAX + SHAREHOLDER_RETURN_MAX,
+    scoredMaxTotal,
   };
 }

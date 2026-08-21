@@ -7,7 +7,8 @@ function metric(
   metricKey: MetricKey,
   value: number,
   periodEnd: string,
-  periodStart = "2024-04-01"
+  periodStart = "2024-04-01",
+  periodType: "FY" | "Q" = "FY"
 ): FinancialMetric {
   return {
     id: `m${nextId++}`,
@@ -16,7 +17,7 @@ function metric(
     value,
     unit: null,
     currency: null,
-    periodType: "FY",
+    periodType,
     periodStart,
     periodEnd,
     reportedAt: null,
@@ -38,6 +39,7 @@ describe("computeQuantScore", () => {
     expect(result.shareholderReturn.score).toBeNull();
     expect(result.total).toBeNull();
     expect(result.maxTotal).toBe(70);
+    expect(result.scoredMaxTotal).toBeNull();
   });
 
   it("scores growth as null with a single revenue data point (no prior period to compare)", () => {
@@ -66,6 +68,16 @@ describe("computeQuantScore", () => {
     expect(negative.growth.score).toBeCloseTo(0, 5);
   });
 
+  it("ignores quarterly rows when computing FY growth (regression: mixed periodType must not corrupt YoY)", () => {
+    const result = computeQuantScore([
+      metric("revenue", 1000, "2025-03-31"), // FY
+      metric("revenue", 1200, "2026-03-31"), // FY, +20% YoY
+      metric("revenue", 320, "2026-06-30", "2026-04-01", "Q"), // a later Q1, much smaller in isolation
+    ]);
+    // If the Q row leaked into FY comparison, growth would come out deeply negative instead of +20%->clamped 15.
+    expect(result.growth.score).toBeCloseTo(15, 5);
+  });
+
   it("scores profitability from operating_margin and roe as the average of both bands", () => {
     const result = computeQuantScore([
       metric("operating_margin", 10, "2026-03-31"), // midpoint of 0-20 band -> 0.5 fraction
@@ -83,7 +95,14 @@ describe("computeQuantScore", () => {
   it("inverts valuation metrics so a lower PER scores higher", () => {
     const cheap = computeQuantScore([metric("per", 10, "2026-03-31")]);
     const expensive = computeQuantScore([metric("per", 30, "2026-03-31")]);
-    expect(cheap.valuation.score).toBeGreaterThan(expensive.valuation.score ?? 0);
+    expect(expensive.valuation.score).not.toBeNull();
+    expect(cheap.valuation.score).toBeGreaterThan(expensive.valuation.score as number);
+  });
+
+  it("treats a negative PER/PBR as unscorable rather than awarding a false maximum score (regression)", () => {
+    const result = computeQuantScore([metric("per", -20, "2026-03-31"), metric("pbr", -1, "2026-03-31")]);
+    // Both sub-metrics are non-positive (loss-making / negative book value) -> nothing scorable -> null, not 15.
+    expect(result.valuation.score).toBeNull();
   });
 
   it("computes total as the sum of non-null category scores only, never inflating with a fabricated zero", () => {
@@ -99,6 +118,9 @@ describe("computeQuantScore", () => {
     expect(result.valuation.score).toBeNull();
     expect(result.total).toBeCloseTo(20, 5);
     expect(result.maxTotal).toBe(70);
+    // scoredMaxTotal reflects only the two categories that were actually measurable (profitability 15 + shareholderReturn 5),
+    // so a consumer computing total/scoredMaxTotal sees 20/20 (perfect on what was measured) rather than a misleading 20/70.
+    expect(result.scoredMaxTotal).toBe(20);
   });
 
   it("every category carries a non-empty reason string", () => {
