@@ -16,9 +16,11 @@ import { FavoriteToggle } from "@/components/search/FavoriteToggle";
 import { EvidenceCoveragePanel } from "@/components/research/EvidenceCoveragePanel";
 import { InstrumentDetailTabs } from "@/components/research/InstrumentDetailTabs";
 import { ResearchOutlookPanel } from "@/components/research/ResearchOutlookPanel";
+import { ResearchSection } from "@/components/research/ResearchSection";
 import { AnalyticsPanel } from "@/components/ui/AnalyticsPanel";
 import { isSampleResearchEnabled } from "@/config/research";
 import { getResearchOutlook } from "@/features/research/sample-outlooks";
+import { listResearchReports } from "@/server/repositories/evidence-repository";
 import { formatDate, formatDateTime, formatPercent } from "@/lib/utils/format";
 
 function UnavailableResearchPanel({ title, description }: { title: string; description: string }) {
@@ -64,6 +66,8 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
       adjustedClose: row.unit_price,
       volume: null,
     }));
+
+    const manualResearchReports = await listResearchReports(supabase, manualInstrument.id).catch(() => []);
 
     const latest = priceHistory.at(-1) ?? null;
     const previous = priceHistory.length > 1 ? priceHistory[priceHistory.length - 2]! : null;
@@ -168,6 +172,16 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
                 </AnalyticsPanel>
               ),
             },
+            {
+              id: "research",
+              label: "リサーチ",
+              content: (
+                <ResearchSection
+                  providerSymbol={manualInstrument.provider_symbol}
+                  reports={manualResearchReports}
+                />
+              ),
+            },
           ]}
         />
 
@@ -194,10 +208,14 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
     instrumentType: info.instrumentType,
   };
 
-  const [quote, dailyPrices] = await Promise.all([
+  const [quote, dailyPrices, existingDbInstrument] = await Promise.all([
     provider.getQuote(providerSymbol).catch(() => null),
     provider.getDailyPrices(providerSymbol, tenYearsAgoIso(), todayIso()).catch(() => []),
+    findInstrumentByProviderSymbol(supabase, providerSymbol).catch(() => null),
   ]);
+  const researchReports = existingDbInstrument
+    ? await listResearchReports(supabase, existingDbInstrument.id).catch(() => [])
+    : [];
 
   const lastClose = dailyPrices.at(-1)?.adjustedClose ?? null;
   const oneYearAgoIndex = Math.max(0, dailyPrices.length - 253);
@@ -356,6 +374,11 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
                 evidence={outlook?.evidence ?? []}
               />
             ),
+          },
+          {
+            id: "research",
+            label: "リサーチ",
+            content: <ResearchSection providerSymbol={instrument.providerSymbol} reports={researchReports} />,
           },
         ]}
       />
