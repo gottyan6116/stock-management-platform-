@@ -20,7 +20,8 @@ import { ResearchSection } from "@/components/research/ResearchSection";
 import { AnalyticsPanel } from "@/components/ui/AnalyticsPanel";
 import { isSampleResearchEnabled } from "@/config/research";
 import { getResearchOutlook } from "@/features/research/sample-outlooks";
-import { listResearchReports } from "@/server/repositories/evidence-repository";
+import { listResearchReports, listFinancialMetrics } from "@/server/repositories/evidence-repository";
+import { FinancialMetricsPanel } from "@/components/research/FinancialMetricsPanel";
 import { formatDate, formatDateTime, formatPercent } from "@/lib/utils/format";
 
 function UnavailableResearchPanel({ title, description }: { title: string; description: string }) {
@@ -56,9 +57,10 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
   ).catch(() => null);
 
   if (manualInstrument) {
-    const [priceHistory, manualResearchReports] = await Promise.all([
+    const [priceHistory, manualResearchReports, manualFinancialMetrics] = await Promise.all([
       listManualFundPrices(supabase, manualInstrument.id).catch(() => []),
       listResearchReports(supabase, manualInstrument.id).catch(() => []),
+      listFinancialMetrics(supabase, manualInstrument.id).catch(() => []),
     ]);
     const dailyPrices: DailyPrice[] = priceHistory.map((row) => ({
       tradingDate: row.price_date,
@@ -174,6 +176,16 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
               ),
             },
             {
+              id: "financials",
+              label: "決算・財務",
+              content: (
+                <FinancialMetricsPanel
+                  providerSymbol={manualInstrument.provider_symbol}
+                  metrics={manualFinancialMetrics}
+                />
+              ),
+            },
+            {
               id: "research",
               label: "リサーチ",
               content: (
@@ -214,9 +226,12 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
     provider.getDailyPrices(providerSymbol, tenYearsAgoIso(), todayIso()).catch(() => []),
     findInstrumentByProviderSymbol(supabase, providerSymbol).catch(() => null),
   ]);
-  const researchReports = existingDbInstrument
-    ? await listResearchReports(supabase, existingDbInstrument.id).catch(() => [])
-    : [];
+  const [researchReports, financialMetrics] = existingDbInstrument
+    ? await Promise.all([
+        listResearchReports(supabase, existingDbInstrument.id).catch(() => []),
+        listFinancialMetrics(supabase, existingDbInstrument.id).catch(() => []),
+      ])
+    : [[], []];
 
   const lastClose = dailyPrices.at(-1)?.adjustedClose ?? null;
   const oneYearAgoIndex = Math.max(0, dailyPrices.length - 253);
@@ -340,10 +355,7 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
             id: "financials",
             label: "決算・財務",
             content: (
-              <UnavailableResearchPanel
-                title="決算・財務"
-                description="決算書と財務指標の実データは未接続です。接続後に更新日と対象期間を明示して表示します。"
-              />
+              <FinancialMetricsPanel providerSymbol={instrument.providerSymbol} metrics={financialMetrics} />
             ),
           },
           {
