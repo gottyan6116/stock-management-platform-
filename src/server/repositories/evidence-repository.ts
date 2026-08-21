@@ -310,7 +310,8 @@ export async function listFinancialMetrics(
     .from("financial_metrics")
     .select("*")
     .eq("instrument_id", instrumentId)
-    .order("period_end", { ascending: false });
+    .order("period_end", { ascending: false })
+    .order("created_at", { ascending: false });
   if (error) throw error;
   return data ?? [];
 }

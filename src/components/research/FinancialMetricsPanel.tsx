@@ -1,11 +1,34 @@
 "use client";
 
 import type { Database } from "@/types/supabase";
+import type { MetricKey } from "@/types/evidence";
 import { AnalyticsPanel } from "@/components/ui/AnalyticsPanel";
 import { ManualMetricForm, METRIC_KEY_LABEL } from "./ManualMetricForm";
 import { formatDate } from "@/lib/utils/format";
 
 type FinancialMetricRow = Database["public"]["Tables"]["financial_metrics"]["Row"];
+
+// 手入力フォームはunit/currencyを収集しないため（値の意味は指標キーで決まる）、
+// %表示すべき指標キーをここで判定する。importで実際にunit='percent'が来た場合もこれで代替可能。
+const PERCENT_METRIC_KEYS = new Set<MetricKey>([
+  "roe",
+  "roic",
+  "operating_margin",
+  "net_margin",
+  "dividend_yield",
+  "dividend_payout",
+  "current_ratio",
+  "fcf_yield",
+  "fcf_margin",
+]);
+
+function formatMetricValue(row: FinancialMetricRow): string {
+  const formatted = row.value.toLocaleString("ja-JP", { maximumFractionDigits: 4 });
+  const isPercent = row.unit === "percent" || PERCENT_METRIC_KEYS.has(row.metric_key as MetricKey);
+  if (isPercent) return `${formatted}%`;
+  if (row.currency) return `${row.currency} ${formatted}`;
+  return formatted;
+}
 
 function formatPeriod(row: FinancialMetricRow): string {
   const label = row.period_type === "FY" ? "通期" : "四半期";
@@ -44,12 +67,9 @@ export function FinancialMetricsPanel({
                 {metrics.map((row) => (
                   <tr key={row.id} className="border-b border-border last:border-0">
                     <td className="py-2 pr-4 font-semibold text-text-primary">
-                      {METRIC_KEY_LABEL[row.metric_key as keyof typeof METRIC_KEY_LABEL] ?? row.metric_key}
+                      {METRIC_KEY_LABEL[row.metric_key] ?? row.metric_key}
                     </td>
-                    <td className="py-2 pr-4 text-text-primary">
-                      {row.value}
-                      {row.unit === "percent" ? "%" : ""}
-                    </td>
+                    <td className="py-2 pr-4 text-text-primary">{formatMetricValue(row)}</td>
                     <td className="py-2 pr-4 text-text-secondary">{formatPeriod(row)}</td>
                     <td className="py-2 pr-4 text-text-muted">{row.is_manual ? "手入力" : "インポート"}</td>
                   </tr>

@@ -91,7 +91,8 @@ export async function POST(request: NextRequest) {
 
     const result = await insertJsonImport(supabase, user.id, instrument.id, jsonParsed.data);
     return NextResponse.json({ data: result });
-  } catch {
+  } catch (err) {
+    console.error("POST /api/research/import failed:", err);
     return apiError("INTERNAL_ERROR");
   }
 }

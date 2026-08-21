@@ -128,12 +128,16 @@ export function ManualMetricForm({ providerSymbol }: { providerSymbol: string })
             value={periodStart}
             onChange={(e) => setPeriodStart(e.target.value)}
             type="date"
+            aria-label="対象期間 開始日"
+            max={periodEnd || undefined}
             className="w-full rounded-button border border-border px-2 py-2 text-sm outline-none focus-visible:border-focus"
           />
           <input
             value={periodEnd}
             onChange={(e) => setPeriodEnd(e.target.value)}
             type="date"
+            aria-label="対象期間 終了日"
+            min={periodStart || undefined}
             className="w-full rounded-button border border-border px-2 py-2 text-sm outline-none focus-visible:border-focus"
           />
         </div>

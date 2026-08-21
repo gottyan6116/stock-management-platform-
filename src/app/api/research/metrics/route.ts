@@ -47,6 +47,10 @@ export async function POST(request: NextRequest) {
   const parsed = requestSchema.safeParse(body);
   if (!parsed.success) return apiError("INVALID_REQUEST", parsed.error.issues[0]?.message);
 
+  // 手入力ファンド（provider='manual'）は大文字小文字を区別する生のprovider_symbolで登録されており、
+  // resolveOrCreateInstrumentはprovider='yahoo'固定・シンボルを大文字化してしまうため一致しない
+  // （src/app/api/research/import/route.ts、src/app/(dashboard)/stocks/[symbol]/page.tsxの同種コメント参照）。
+  // 先にmanual instrumentとして検索し、無ければYahoo解決にフォールバックする。
   const manualInstrument = await findInstrumentByProviderSymbol(
     supabase,
     parsed.data.providerSymbol,
@@ -70,7 +74,8 @@ export async function POST(request: NextRequest) {
       reportedAt: parsed.data.reportedAt,
     });
     return NextResponse.json({ data: { metricId: metric.id } });
-  } catch {
+  } catch (err) {
+    console.error("POST /api/research/metrics failed:", err);
     return apiError("INTERNAL_ERROR");
   }
 }
