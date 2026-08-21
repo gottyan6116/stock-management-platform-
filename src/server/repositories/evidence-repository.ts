@@ -346,7 +346,8 @@ export async function listCompanyCatalysts(
     .from("company_catalysts")
     .select("*")
     .eq("instrument_id", instrumentId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
   if (error) throw error;
   return data ?? [];
 }
