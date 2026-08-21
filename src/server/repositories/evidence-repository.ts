@@ -82,6 +82,9 @@ export async function insertJsonImport(
       evidence_class: source.evidenceClass,
       reliability: source.reliability,
     }));
+    // sourceKeyはDBへ保存しないため、insert結果の行順が入力配列の順と一致することに依存して
+    // sourceKey→idを対応付ける。単一INSERT...VALUES...RETURNINGは常に指定順で行を返す
+    // （PostgreSQLの保証。トリガーや分割INSERTを追加する場合はこの前提が崩れるため要注意）。
     const { data: insertedSources, error: sourcesError } = await supabase
       .from("research_sources")
       .insert(sourceRows)
@@ -180,6 +183,7 @@ export async function insertJsonImport(
         likelihood: risk.likelihood,
         detected_at: risk.detectedAt,
         source_id: resolveSourceId(risk.sourceKey),
+        source_report_id: report.id,
       }))
     );
     if (error) throw error;
@@ -199,6 +203,7 @@ export async function insertJsonImport(
         published_at: opinion.publishedAt,
         source_url: opinion.sourceUrl,
         source_id: resolveSourceId(opinion.sourceKey),
+        source_report_id: report.id,
       }))
     );
     if (error) throw error;
