@@ -79,7 +79,9 @@ export async function insertJsonImport(
       source_type: source.sourceType,
       source_name: source.sourceName,
       source_url: source.sourceUrl,
-      evidence_class: source.evidenceClass,
+      // PostgRESTの配列（複数行）insertはomittedキーにcolumn defaultを適用せずnullを送るため
+      // （単一行insertとは挙動が異なる既知の癖）、evidence_classはDB defaultの'fact'を明示する。
+      evidence_class: source.evidenceClass ?? "fact",
       reliability: source.reliability,
     }));
     // sourceKeyはDBへ保存しないため、insert結果の行順が入力配列の順と一致することに依存して
