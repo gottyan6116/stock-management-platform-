@@ -16,7 +16,7 @@ const sourceTypeValues: [SourceType, ...SourceType[]] = [
   "other",
 ];
 
-const metricKeyValues: [MetricKey, ...MetricKey[]] = [
+export const metricKeyValues: [MetricKey, ...MetricKey[]] = [
   "revenue",
   "operating_income",
   "net_income",

@@ -259,3 +259,58 @@ export async function listResearchReports(
     sourceType: row.research_sources?.source_type ?? null,
   }));
 }
+
+type FinancialMetricRow = Database["public"]["Tables"]["financial_metrics"]["Row"];
+
+export interface InsertManualMetricParams {
+  userId: string;
+  instrumentId: string;
+  metricKey: FinancialMetricRow["metric_key"];
+  value: number;
+  unit?: string;
+  currency?: "JPY" | "USD";
+  periodType: "FY" | "Q";
+  periodStart: string;
+  periodEnd: string;
+  reportedAt?: string;
+}
+
+/** 手入力の財務指標を1件保存する。source_id/source_report_idは常にnull（インポートされたレポートに由来しないため）。 */
+export async function insertManualMetric(
+  supabase: SupabaseClient<Database>,
+  params: InsertManualMetricParams
+): Promise<FinancialMetricRow> {
+  const { data, error } = await supabase
+    .from("financial_metrics")
+    .insert({
+      user_id: params.userId,
+      instrument_id: params.instrumentId,
+      metric_key: params.metricKey,
+      value: params.value,
+      unit: params.unit,
+      currency: params.currency,
+      period_type: params.periodType,
+      period_start: params.periodStart,
+      period_end: params.periodEnd,
+      reported_at: params.reportedAt,
+      is_manual: true,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+/** 銘柄に紐づく財務指標を期間の新しい順で返す（手入力・インポート両方を含む）。 */
+export async function listFinancialMetrics(
+  supabase: SupabaseClient<Database>,
+  instrumentId: string
+): Promise<FinancialMetricRow[]> {
+  const { data, error } = await supabase
+    .from("financial_metrics")
+    .select("*")
+    .eq("instrument_id", instrumentId)
+    .order("period_end", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
