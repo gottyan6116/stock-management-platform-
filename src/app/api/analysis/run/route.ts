@@ -75,23 +75,24 @@ export async function POST(request: NextRequest) {
     };
   } else {
     const providerSymbol = normalizeProviderSymbol(parsed.data.providerSymbol);
-    const provider = getMarketDataProvider();
-    const info = await provider.getInstrumentInfo(providerSymbol).catch(() => null);
-    if (!info) return apiError("NOT_FOUND", "指定された銘柄が見つかりませんでした。");
-
+    // research/import・research/metricsの各routeと異なり、ここは既知銘柄の再分析が主用途のため、
+    // 未知銘柄のときだけYahooへ問い合わせるresolveOrCreateInstrumentを先に呼ぶ。
+    // 既知銘柄はDBヒットのみで解決でき、Yahoo側の一時的な障害やレート制限がある場合でも
+    // ローカルに蓄積済みのevidenceだけで分析を実行できる。
     const instrument = await resolveOrCreateInstrument(providerSymbol).catch(() => null);
     if (!instrument) return apiError("NOT_FOUND", "指定された銘柄が見つかりませんでした。");
     instrumentId = instrument.id;
 
+    const provider = getMarketDataProvider();
     const quote = await provider.getQuote(providerSymbol).catch(() => null);
 
     companySnapshot = {
       instrumentId: instrument.id,
-      providerSymbol: info.providerSymbol,
-      name: info.name,
-      exchange: info.exchange,
-      market: info.market,
-      currency: info.currency,
+      providerSymbol: instrument.provider_symbol,
+      name: instrument.name,
+      exchange: instrument.exchange,
+      market: instrument.market,
+      currency: instrument.currency,
       sector: instrument.sector,
       industry: instrument.industry,
     };
