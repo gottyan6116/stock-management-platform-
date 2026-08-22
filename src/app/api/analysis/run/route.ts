@@ -14,12 +14,18 @@ import {
   listCompanyEvents,
   listResearchOpinions,
   listResearchReports,
+  listResearchSources,
 } from "@/server/repositories/evidence-repository";
 import { buildInvestmentEvidence } from "@/lib/evidence/builder";
 import type { CompanySnapshot, MarketSnapshot } from "@/lib/evidence/builder";
 import { computeEvidenceHash } from "@/lib/evidence/hash";
 import { computeQuantScore } from "@/lib/scoring/quant-score";
 import { getInvestmentAnalysisProvider } from "@/lib/ai/investment-analysis/get-provider";
+
+// Cloudflare Workers AIの生成に数十秒かかることがあり（cloudflare-provider.tsのfetchタイムアウトは60秒）、
+// Vercelの既定のFunction実行時間（Hobby: 10秒 / Pro: 15秒）ではその前にプラットフォーム側に強制終了され、
+// analysis_runsへの保存もエラーハンドリングも行われないまま生の504になってしまう。明示的に延長する。
+export const maxDuration = 60;
 
 const requestSchema = z.object({
   providerSymbol: z.string().trim().min(1),
@@ -109,7 +115,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const [financials, managementStatements, catalysts, risks, events, opinions, research] = await Promise.all([
+    const [financials, managementStatements, catalysts, risks, events, opinions, research, sources] = await Promise.all([
       listFinancialMetrics(supabase, instrumentId),
       listManagementStatements(supabase, instrumentId),
       listCompanyCatalysts(supabase, instrumentId),
@@ -117,11 +123,23 @@ export async function POST(request: NextRequest) {
       listCompanyEvents(supabase, instrumentId),
       listResearchOpinions(supabase, instrumentId),
       listResearchReports(supabase, instrumentId),
+      listResearchSources(supabase, instrumentId),
     ]);
 
     const evidence = buildInvestmentEvidence({
       company: companySnapshot,
       market: marketSnapshot,
+      sources: sources.map((row) => ({
+        id: row.id,
+        instrumentId: row.instrument_id,
+        sourceType: row.source_type,
+        sourceName: row.source_name,
+        sourceUrl: row.source_url,
+        evidenceClass: row.evidence_class,
+        reliability: row.reliability,
+        researchedAt: row.researched_at,
+        createdAt: row.created_at,
+      })),
       financials: financials.map((row) => ({
         id: row.id,
         instrumentId: row.instrument_id,

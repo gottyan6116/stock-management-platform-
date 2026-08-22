@@ -48,6 +48,7 @@ function baseInput(financials: FinancialMetric[] = []) {
   return {
     company,
     market,
+    sources: [],
     financials,
     managementStatements: [],
     catalysts: [],

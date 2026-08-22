@@ -43,21 +43,81 @@ function summarizeList<T>(label: string, items: readonly T[], render: (item: T) 
   return `${label} (${items.length}):\n` + items.map((item) => `- ${render(item)}`).join("\n");
 }
 
+/** source_id -> "S3(official_ir/fact)" のような短いタグを引けるマップを作る。未設定/該当なしは呼び出し側でハンドリング。 */
+function buildSourceTagLookup(sources: InvestmentEvidence["sources"]): Map<string, string> {
+  const tags = new Map<string, string>();
+  sources.forEach((source, index) => {
+    tags.set(source.id, `S${index + 1}(${source.sourceType}/${source.evidenceClass})`);
+  });
+  return tags;
+}
+
+function sourceTag(sourceId: string | null, tags: Map<string, string>): string {
+  if (!sourceId) return "";
+  const tag = tags.get(sourceId);
+  return tag ? ` [source: ${tag}]` : "";
+}
+
 export function buildUserPrompt(evidence: InvestmentEvidence, quantScore: QuantScoreBreakdown): string {
   const parts: string[] = [];
+  const sourceTags = buildSourceTagLookup(evidence.sources);
+
   parts.push(`# Company\n${evidence.company.name} (${evidence.company.providerSymbol}, ${evidence.company.exchange ?? "unknown exchange"}, ${evidence.company.market}, ${evidence.company.currency})`);
   parts.push(`# Market Snapshot\nPrice date: ${evidence.market.priceDate ?? "unknown"}\nClose: ${evidence.market.close ?? "no data"}\nChange: ${evidence.market.changePercent ?? "no data"}%\nDividend yield: ${evidence.market.dividendYield ?? "no data"}\nTrailing PER: ${evidence.market.trailingPE ?? "no data"}`);
   parts.push(
-    summarizeList("# Financial Metrics", evidence.financials, (m) => `${m.metricKey}=${m.value} (${m.periodType} ending ${m.periodEnd}${m.isManual ? ", manually entered" : ""})`)
+    evidence.sources.length === 0
+      ? "# Sources: no data"
+      : `# Sources (evidenceClass tells you whether an item below is a directly-stated FACT, a third-party OPINION, or an AI-generated INTERPRETATION from an imported report — weigh accordingly) (${evidence.sources.length}):\n` +
+          evidence.sources
+            .map(
+              (s, i) =>
+                `- S${i + 1}: ${s.sourceName} (${s.sourceType}, evidenceClass=${s.evidenceClass}${s.reliability ? `, reliability=${s.reliability}` : ""})`
+            )
+            .join("\n")
   );
   parts.push(
-    summarizeList("# Management Statements", evidence.managementStatements, (m) => `[${m.topic}] ${m.personName}${m.role ? ` (${m.role})` : ""}: "${m.statement}"${m.statementDate ? ` (${m.statementDate})` : ""}`)
+    summarizeList(
+      "# Financial Metrics",
+      evidence.financials,
+      (m) => `${m.metricKey}=${m.value} (${m.periodType} ending ${m.periodEnd}${m.isManual ? ", manually entered" : ""})${sourceTag(m.sourceId, sourceTags)}`
+    )
   );
-  parts.push(summarizeList("# Catalysts", evidence.catalysts, (c) => `${c.description}${c.expectedTiming ? ` (expected ${c.expectedTiming})` : ""}${c.impact ? ` [impact: ${c.impact}]` : ""}`));
-  parts.push(summarizeList("# Risks", evidence.risks, (r) => `[${r.riskType}] ${r.description}${r.severity ? ` (severity: ${r.severity})` : ""}`));
-  parts.push(summarizeList("# Events", evidence.events, (e) => `[${e.eventType}] ${e.title} (${e.eventDate})${e.description ? `: ${e.description}` : ""}`));
-  parts.push(summarizeList("# Investor/Analyst Opinions", evidence.opinions, (o) => `${o.author}${o.organization ? ` (${o.organization})` : ""}: ${o.summary}${o.rating !== null ? ` [rating: ${o.rating}]` : ""}`));
-  parts.push(summarizeList("# Imported Research Reports", evidence.research, (r) => `${r.sourceName ?? "unknown source"} (${r.sourceType ?? "unknown type"}, ${r.researchDate ?? r.importedAt}): ${r.summary ?? "no summary"}`));
+  parts.push(
+    summarizeList(
+      "# Management Statements",
+      evidence.managementStatements,
+      (m) => `[${m.topic}] ${m.personName}${m.role ? ` (${m.role})` : ""}: "${m.statement}"${m.statementDate ? ` (${m.statementDate})` : ""}${sourceTag(m.sourceId, sourceTags)}`
+    )
+  );
+  parts.push(
+    summarizeList(
+      "# Catalysts",
+      evidence.catalysts,
+      (c) => `${c.description}${c.expectedTiming ? ` (expected ${c.expectedTiming})` : ""}${c.impact ? ` [impact: ${c.impact}]` : ""}${sourceTag(c.sourceId, sourceTags)}`
+    )
+  );
+  parts.push(
+    summarizeList(
+      "# Risks",
+      evidence.risks,
+      (r) => `[${r.riskType}] ${r.description}${r.severity ? ` (severity: ${r.severity})` : ""}${sourceTag(r.sourceId, sourceTags)}`
+    )
+  );
+  parts.push(
+    summarizeList(
+      "# Events",
+      evidence.events,
+      (e) => `[${e.eventType}] ${e.title} (${e.eventDate})${e.description ? `: ${e.description}` : ""}${sourceTag(e.sourceId, sourceTags)}`
+    )
+  );
+  parts.push(
+    summarizeList(
+      "# Investor/Analyst Opinions",
+      evidence.opinions,
+      (o) => `${o.author}${o.organization ? ` (${o.organization})` : ""}: ${o.summary}${o.rating !== null ? ` [rating: ${o.rating}]` : ""}${sourceTag(o.sourceId, sourceTags)}`
+    )
+  );
+  parts.push(summarizeList("# Imported Research Reports", evidence.research, (r) => `${r.sourceName ?? "unknown source"} (${r.sourceType ?? "unknown type"}, ${r.researchDate ?? r.importedAt}): ${r.summary ?? "no summary (raw text archived but not analyzable — treat as absent evidence)"}`));
   parts.push(
     `# Data Coverage\n${JSON.stringify(evidence.dataCoverage)}`
   );

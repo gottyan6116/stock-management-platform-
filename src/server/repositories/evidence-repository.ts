@@ -396,3 +396,24 @@ export async function listResearchOpinions(
   if (error) throw error;
   return data ?? [];
 }
+
+type ResearchSourceRow = Database["public"]["Tables"]["research_sources"]["Row"];
+
+/**
+ * 銘柄に紐づく情報源（research_sources）を新しい順で返す。
+ * 各evidence行のsource_idはこの一覧の行を指しており、evidence_class（fact/opinion/ai_interpretation）で
+ * 「事実か意見かAIの解釈か」を区別できる。Evidence Builder経由でAIプロンプトに渡すことで、
+ * どの発言・数値がどの情報源に基づくかをAI自身が参照できるようにする。
+ */
+export async function listResearchSources(
+  supabase: SupabaseClient<Database>,
+  instrumentId: string
+): Promise<ResearchSourceRow[]> {
+  const { data, error } = await supabase
+    .from("research_sources")
+    .select("*")
+    .eq("instrument_id", instrumentId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}

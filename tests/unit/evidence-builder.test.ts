@@ -28,6 +28,7 @@ function emptyEvidenceInputs() {
   return {
     company,
     market,
+    sources: [],
     financials: [],
     managementStatements: [],
     catalysts: [],

@@ -10,6 +10,9 @@ type FinancialMetricRow = Database["public"]["Tables"]["financial_metrics"]["Row
 
 // 手入力フォームはunit/currencyを収集しないため（値の意味は指標キーで決まる）、
 // %表示すべき指標キーをここで判定する。importで実際にunit='percent'が来た場合もこれで代替可能。
+// current_ratioは含めない — src/lib/scoring/quant-score.tsのスコアリングが
+// 1.5のような「倍」表記を前提にしており（low:1, high:2）、ここを%扱いにすると
+// 表示（150%）と採点（1.5として入力すべき値）の単位が食い違ってしまう。
 const PERCENT_METRIC_KEYS = new Set<MetricKey>([
   "roe",
   "roic",
@@ -17,7 +20,6 @@ const PERCENT_METRIC_KEYS = new Set<MetricKey>([
   "net_margin",
   "dividend_yield",
   "dividend_payout",
-  "current_ratio",
   "fcf_yield",
   "fcf_margin",
 ]);

@@ -5,6 +5,7 @@ import type {
   FinancialMetric,
   ManagementStatement,
   ResearchOpinion,
+  ResearchSource,
 } from "@/types/evidence";
 import type { ResearchReportSummary } from "@/server/repositories/evidence-repository";
 import type { Market, Currency } from "@/types/domain";
@@ -48,6 +49,7 @@ export interface DataCoverage {
 export interface InvestmentEvidence {
   company: CompanySnapshot;
   market: MarketSnapshot;
+  sources: ResearchSource[];
   financials: FinancialMetric[];
   managementStatements: ManagementStatement[];
   catalysts: CompanyCatalyst[];
@@ -62,6 +64,7 @@ export interface InvestmentEvidence {
 export interface BuildEvidenceInput {
   company: CompanySnapshot;
   market: MarketSnapshot;
+  sources: ResearchSource[];
   financials: FinancialMetric[];
   managementStatements: ManagementStatement[];
   catalysts: CompanyCatalyst[];
@@ -86,7 +89,10 @@ function computeDataCoverage(input: BuildEvidenceInput): DataCoverage {
   const risks = coverageOf(input.risks.length);
   const events = coverageOf(input.events.length);
   const opinions = coverageOf(input.opinions.length);
-  const research = coverageOf(input.research.length);
+  // summaryが無いレポート（例: paste_textモードで貼り付けただけの生テキスト）は
+  // buildUserPromptがAIへ内容を渡せない（"no summary"としか表示できない）ため、
+  // カバレッジ上も「実質的に読める内容がある」とはみなさない。
+  const research = coverageOf(input.research.filter((r) => r.summary !== null).length);
   const categories = [financials, management, catalysts, risks, events, opinions, research];
   const overall = categories.reduce((sum, value) => sum + value, 0) / categories.length;
   return { financials, management, catalysts, risks, events, opinions, research, overall };
@@ -97,6 +103,7 @@ export function buildInvestmentEvidence(input: BuildEvidenceInput): InvestmentEv
   return {
     company: input.company,
     market: input.market,
+    sources: input.sources,
     financials: input.financials,
     managementStatements: input.managementStatements,
     catalysts: input.catalysts,

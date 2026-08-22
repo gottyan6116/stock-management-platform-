@@ -40,6 +40,7 @@ describe("buildUserPrompt", () => {
     const evidence = buildInvestmentEvidence({
       company,
       market,
+      sources: [],
       financials: [],
       managementStatements: [],
       catalysts: [],
@@ -58,6 +59,7 @@ describe("buildUserPrompt", () => {
     const evidence = buildInvestmentEvidence({
       company,
       market,
+      sources: [],
       financials: [],
       managementStatements: [],
       catalysts: [],
@@ -69,5 +71,53 @@ describe("buildUserPrompt", () => {
     const quantScore = computeQuantScore(evidence.financials);
     const prompt = buildUserPrompt(evidence, quantScore);
     expect(prompt.toLowerCase()).toMatch(/no data|none|empty/);
+  });
+
+  it("renders sources with evidenceClass and tags evidence items back to their source (regression: provenance must reach the AI)", () => {
+    const evidence = buildInvestmentEvidence({
+      company,
+      market,
+      sources: [
+        {
+          id: "src-1",
+          instrumentId: "inst-1",
+          sourceType: "official_ir",
+          sourceName: "FY2026 Q1 Earnings Presentation",
+          sourceUrl: null,
+          evidenceClass: "fact",
+          reliability: "high",
+          researchedAt: null,
+          createdAt: "2026-08-20T00:00:00Z",
+        },
+      ],
+      financials: [],
+      managementStatements: [
+        {
+          id: "ms-1",
+          instrumentId: "inst-1",
+          personName: "Hiroki Totoki",
+          role: "President and COO",
+          statement: "We expect continued growth in the Game & Network Services segment.",
+          statementDate: "2026-08-05",
+          topic: "guidance",
+          sourceId: "src-1",
+          sourceReportId: null,
+          page: null,
+          confidence: "high",
+          createdAt: "2026-08-20T00:00:00Z",
+        },
+      ],
+      catalysts: [],
+      risks: [],
+      events: [],
+      opinions: [],
+      research: [],
+    });
+    const quantScore = computeQuantScore(evidence.financials);
+    const prompt = buildUserPrompt(evidence, quantScore);
+    expect(prompt).toContain("evidenceClass=fact");
+    expect(prompt).toContain("FY2026 Q1 Earnings Presentation");
+    // The management statement line should reference the source by its S-tag, not just list it separately.
+    expect(prompt).toMatch(/Totoki.*\[source: S1/s);
   });
 });

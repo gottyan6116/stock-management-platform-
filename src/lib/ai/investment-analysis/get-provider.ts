@@ -18,9 +18,15 @@ export function getInvestmentAnalysisProvider(): InvestmentAnalysisProvider {
   const model = process.env.CLOUDFLARE_AI_MODEL || "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
   if (!accountId || !apiToken) {
-    // 認証情報が無い環境（CI等）ではmockへフォールバックし、実APIキー漏洩や起動失敗を避ける。
-    cached = new MockInvestmentAnalysisProvider();
-    return cached;
+    // 認証情報欠如時にmockへ黙ってフォールバックすると、本番で環境変数の設定漏れ/typoが
+    // あった場合に「成功」として記録された分析結果（実際はプレースホルダー）がanalysis_runsに
+    // 残ってしまう（fail-open）。mockを使いたい場合はANALYSIS_PROVIDER=mockを明示させる
+    // （fail-closed）。自動テストはgetInvestmentAnalysisProvider/CloudflareWorkersAIProviderを
+    // 呼ばないため、この分岐はCIの動作には影響しない。
+    throw new Error(
+      "CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN must be set to use the Cloudflare analysis provider. " +
+        "Set ANALYSIS_PROVIDER=mock explicitly if a mock result is intended."
+    );
   }
 
   cached = new CloudflareWorkersAIProvider(accountId, apiToken, model);
