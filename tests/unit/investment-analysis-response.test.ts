@@ -53,4 +53,15 @@ describe("parseAnalysisResponse", () => {
     const invalid = { ...validPayload(), confidence: 150 };
     expect(() => parseAnalysisResponse(JSON.stringify(invalid))).toThrow();
   });
+
+  it("accepts an already-parsed object (regression: some Cloudflare models return result.response as an object, not a string)", () => {
+    const result = parseAnalysisResponse(validPayload());
+    expect(result.confidence).toBe(68);
+    expect(result.longTerm.rating).toBe("Strong");
+  });
+
+  it("throws a descriptive error when given neither a string nor an object", () => {
+    expect(() => parseAnalysisResponse(null)).toThrow(/neither/);
+    expect(() => parseAnalysisResponse(42)).toThrow(/neither/);
+  });
 });

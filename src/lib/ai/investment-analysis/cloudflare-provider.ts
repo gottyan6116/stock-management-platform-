@@ -7,7 +7,10 @@ import { parseAnalysisResponse } from "./response";
 import { buildSystemPrompt, buildUserPrompt } from "./prompt";
 
 interface CloudflareAiRunResponse {
-  result?: { response?: string };
+  // モデルによって result.response は生成テキスト（string）のこともあれば、
+  // Cloudflare側がJSON形状を検知して既にパースしたオブジェクトのこともある
+  // （parseAnalysisResponseが両方を受け付ける）。
+  result?: { response?: unknown };
   success: boolean;
   errors?: Array<{ message: string }>;
 }
