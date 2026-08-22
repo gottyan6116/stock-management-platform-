@@ -304,6 +304,430 @@ export interface Database {
           },
         ];
       };
+      research_sources: {
+        Row: {
+          id: string;
+          user_id: string;
+          instrument_id: string;
+          source_type:
+            | "chatgpt"
+            | "claude"
+            | "gemini"
+            | "perplexity"
+            | "official_ir"
+            | "edinet"
+            | "sec"
+            | "analyst"
+            | "investor"
+            | "news"
+            | "manual"
+            | "other";
+          source_name: string;
+          source_url: string | null;
+          evidence_class: "fact" | "opinion" | "ai_interpretation";
+          reliability: "low" | "medium" | "high" | null;
+          researched_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["research_sources"]["Row"]> &
+          Pick<
+            Database["public"]["Tables"]["research_sources"]["Row"],
+            "user_id" | "instrument_id" | "source_type" | "source_name"
+          >;
+        Update: Partial<Database["public"]["Tables"]["research_sources"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "research_sources_instrument_id_fkey";
+            columns: ["instrument_id"];
+            isOneToOne: false;
+            referencedRelation: "instruments";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      research_reports: {
+        Row: {
+          id: string;
+          user_id: string;
+          instrument_id: string;
+          source_id: string | null;
+          import_mode: "paste_text" | "json" | "manual_form";
+          research_date: string | null;
+          original_query: string | null;
+          research_model: string | null;
+          raw_content: string;
+          structured_json: Record<string, unknown> | null;
+          summary: string | null;
+          user_notes: string | null;
+          imported_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["research_reports"]["Row"]> &
+          Pick<
+            Database["public"]["Tables"]["research_reports"]["Row"],
+            "user_id" | "instrument_id" | "import_mode" | "raw_content"
+          >;
+        Update: Partial<Database["public"]["Tables"]["research_reports"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "research_reports_instrument_id_fkey";
+            columns: ["instrument_id"];
+            isOneToOne: false;
+            referencedRelation: "instruments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "research_reports_source_id_fkey";
+            columns: ["source_id"];
+            isOneToOne: false;
+            referencedRelation: "research_sources";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      financial_metrics: {
+        Row: {
+          id: string;
+          user_id: string;
+          instrument_id: string;
+          metric_key:
+            | "revenue"
+            | "operating_income"
+            | "net_income"
+            | "eps"
+            | "fcf"
+            | "cash"
+            | "debt"
+            | "roe"
+            | "roic"
+            | "operating_margin"
+            | "net_margin"
+            | "per"
+            | "pbr"
+            | "ev_ebitda"
+            | "dividend_yield"
+            | "dividend_payout"
+            | "current_ratio"
+            | "net_debt"
+            | "net_debt_ebitda"
+            | "fcf_yield"
+            | "fcf_margin";
+          value: number;
+          unit: string | null;
+          currency: "JPY" | "USD" | null;
+          period_type: "FY" | "Q";
+          period_start: string;
+          period_end: string;
+          reported_at: string | null;
+          source_id: string | null;
+          source_report_id: string | null;
+          is_manual: boolean;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["financial_metrics"]["Row"]> &
+          Pick<
+            Database["public"]["Tables"]["financial_metrics"]["Row"],
+            "user_id" | "instrument_id" | "metric_key" | "value" | "period_type" | "period_start" | "period_end"
+          >;
+        Update: Partial<Database["public"]["Tables"]["financial_metrics"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "financial_metrics_instrument_id_fkey";
+            columns: ["instrument_id"];
+            isOneToOne: false;
+            referencedRelation: "instruments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "financial_metrics_source_id_fkey";
+            columns: ["source_id"];
+            isOneToOne: false;
+            referencedRelation: "research_sources";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "financial_metrics_source_report_id_fkey";
+            columns: ["source_report_id"];
+            isOneToOne: false;
+            referencedRelation: "research_reports";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      management_statements: {
+        Row: {
+          id: string;
+          user_id: string;
+          instrument_id: string;
+          person_name: string;
+          role: string | null;
+          statement: string;
+          statement_date: string | null;
+          topic:
+            | "guidance"
+            | "strategy"
+            | "margin"
+            | "capital_allocation"
+            | "m_and_a"
+            | "ai"
+            | "product"
+            | "international"
+            | "shareholder_return"
+            | "risk"
+            | "competition"
+            | "other";
+          source_id: string | null;
+          source_report_id: string | null;
+          page: number | null;
+          confidence: "low" | "medium" | "high" | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["management_statements"]["Row"]> &
+          Pick<
+            Database["public"]["Tables"]["management_statements"]["Row"],
+            "user_id" | "instrument_id" | "person_name" | "statement" | "topic"
+          >;
+        Update: Partial<Database["public"]["Tables"]["management_statements"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "management_statements_instrument_id_fkey";
+            columns: ["instrument_id"];
+            isOneToOne: false;
+            referencedRelation: "instruments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "management_statements_source_id_fkey";
+            columns: ["source_id"];
+            isOneToOne: false;
+            referencedRelation: "research_sources";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "management_statements_source_report_id_fkey";
+            columns: ["source_report_id"];
+            isOneToOne: false;
+            referencedRelation: "research_reports";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      research_opinions: {
+        Row: {
+          id: string;
+          user_id: string;
+          instrument_id: string;
+          author: string;
+          organization: string | null;
+          stance: string | null;
+          summary: string;
+          rating: number | null;
+          target_price: number | null;
+          published_at: string | null;
+          source_id: string | null;
+          source_report_id: string | null;
+          source_url: string | null;
+          reliability: "low" | "medium" | "high" | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["research_opinions"]["Row"]> &
+          Pick<Database["public"]["Tables"]["research_opinions"]["Row"], "user_id" | "instrument_id" | "author" | "summary">;
+        Update: Partial<Database["public"]["Tables"]["research_opinions"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "research_opinions_instrument_id_fkey";
+            columns: ["instrument_id"];
+            isOneToOne: false;
+            referencedRelation: "instruments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "research_opinions_source_id_fkey";
+            columns: ["source_id"];
+            isOneToOne: false;
+            referencedRelation: "research_sources";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "research_opinions_source_report_id_fkey";
+            columns: ["source_report_id"];
+            isOneToOne: false;
+            referencedRelation: "research_reports";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      company_events: {
+        Row: {
+          id: string;
+          user_id: string;
+          instrument_id: string;
+          event_type:
+            | "earnings"
+            | "guidance"
+            | "m_and_a"
+            | "buyback"
+            | "dividend"
+            | "capital_raise"
+            | "product"
+            | "regulation"
+            | "lawsuit"
+            | "management_change"
+            | "restructuring"
+            | "partnership"
+            | "other";
+          title: string;
+          description: string | null;
+          event_date: string;
+          source_id: string | null;
+          source_report_id: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["company_events"]["Row"]> &
+          Pick<
+            Database["public"]["Tables"]["company_events"]["Row"],
+            "user_id" | "instrument_id" | "event_type" | "title" | "event_date"
+          >;
+        Update: Partial<Database["public"]["Tables"]["company_events"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "company_events_instrument_id_fkey";
+            columns: ["instrument_id"];
+            isOneToOne: false;
+            referencedRelation: "instruments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "company_events_source_id_fkey";
+            columns: ["source_id"];
+            isOneToOne: false;
+            referencedRelation: "research_sources";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "company_events_source_report_id_fkey";
+            columns: ["source_report_id"];
+            isOneToOne: false;
+            referencedRelation: "research_reports";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      company_risks: {
+        Row: {
+          id: string;
+          user_id: string;
+          instrument_id: string;
+          risk_type: string;
+          description: string;
+          severity: "low" | "medium" | "high" | null;
+          likelihood: "low" | "medium" | "high" | null;
+          source_id: string | null;
+          source_report_id: string | null;
+          detected_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["company_risks"]["Row"]> &
+          Pick<Database["public"]["Tables"]["company_risks"]["Row"], "user_id" | "instrument_id" | "risk_type" | "description">;
+        Update: Partial<Database["public"]["Tables"]["company_risks"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "company_risks_instrument_id_fkey";
+            columns: ["instrument_id"];
+            isOneToOne: false;
+            referencedRelation: "instruments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "company_risks_source_id_fkey";
+            columns: ["source_id"];
+            isOneToOne: false;
+            referencedRelation: "research_sources";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "company_risks_source_report_id_fkey";
+            columns: ["source_report_id"];
+            isOneToOne: false;
+            referencedRelation: "research_reports";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      company_catalysts: {
+        Row: {
+          id: string;
+          user_id: string;
+          instrument_id: string;
+          catalyst_type: string | null;
+          description: string;
+          expected_timing: string | null;
+          impact: "low" | "medium" | "high" | null;
+          source_id: string | null;
+          source_report_id: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["company_catalysts"]["Row"]> &
+          Pick<Database["public"]["Tables"]["company_catalysts"]["Row"], "user_id" | "instrument_id" | "description">;
+        Update: Partial<Database["public"]["Tables"]["company_catalysts"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "company_catalysts_instrument_id_fkey";
+            columns: ["instrument_id"];
+            isOneToOne: false;
+            referencedRelation: "instruments";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "company_catalysts_source_id_fkey";
+            columns: ["source_id"];
+            isOneToOne: false;
+            referencedRelation: "research_sources";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "company_catalysts_source_report_id_fkey";
+            columns: ["source_report_id"];
+            isOneToOne: false;
+            referencedRelation: "research_reports";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      analysis_runs: {
+        Row: {
+          id: string;
+          user_id: string;
+          instrument_id: string;
+          model: string;
+          analysis_version: string;
+          scoring_version: string;
+          input_snapshot: Record<string, unknown>;
+          evidence_hash: string;
+          quant_score: number | null;
+          qual_score: number | null;
+          medium_score: number | null;
+          long_score: number | null;
+          confidence: number | null;
+          result_json: Record<string, unknown> | null;
+          status: "pending" | "success" | "failed";
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["analysis_runs"]["Row"]> &
+          Pick<
+            Database["public"]["Tables"]["analysis_runs"]["Row"],
+            "user_id" | "instrument_id" | "model" | "analysis_version" | "scoring_version" | "input_snapshot" | "evidence_hash"
+          >;
+        Update: Partial<Database["public"]["Tables"]["analysis_runs"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "analysis_runs_instrument_id_fkey";
+            columns: ["instrument_id"];
+            isOneToOne: false;
+            referencedRelation: "instruments";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

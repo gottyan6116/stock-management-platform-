@@ -16,9 +16,12 @@ import { FavoriteToggle } from "@/components/search/FavoriteToggle";
 import { EvidenceCoveragePanel } from "@/components/research/EvidenceCoveragePanel";
 import { InstrumentDetailTabs } from "@/components/research/InstrumentDetailTabs";
 import { ResearchOutlookPanel } from "@/components/research/ResearchOutlookPanel";
+import { ResearchSection } from "@/components/research/ResearchSection";
 import { AnalyticsPanel } from "@/components/ui/AnalyticsPanel";
 import { isSampleResearchEnabled } from "@/config/research";
 import { getResearchOutlook } from "@/features/research/sample-outlooks";
+import { listResearchReports, listFinancialMetrics } from "@/server/repositories/evidence-repository";
+import { FinancialMetricsPanel } from "@/components/research/FinancialMetricsPanel";
 import { formatDate, formatDateTime, formatPercent } from "@/lib/utils/format";
 
 function UnavailableResearchPanel({ title, description }: { title: string; description: string }) {
@@ -54,7 +57,11 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
   ).catch(() => null);
 
   if (manualInstrument) {
-    const priceHistory = await listManualFundPrices(supabase, manualInstrument.id).catch(() => []);
+    const [priceHistory, manualResearchReports, manualFinancialMetrics] = await Promise.all([
+      listManualFundPrices(supabase, manualInstrument.id).catch(() => []),
+      listResearchReports(supabase, manualInstrument.id).catch(() => []),
+      listFinancialMetrics(supabase, manualInstrument.id).catch(() => []),
+    ]);
     const dailyPrices: DailyPrice[] = priceHistory.map((row) => ({
       tradingDate: row.price_date,
       open: row.unit_price,
@@ -168,6 +175,26 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
                 </AnalyticsPanel>
               ),
             },
+            {
+              id: "financials",
+              label: "決算・財務",
+              content: (
+                <FinancialMetricsPanel
+                  providerSymbol={manualInstrument.provider_symbol}
+                  metrics={manualFinancialMetrics}
+                />
+              ),
+            },
+            {
+              id: "research",
+              label: "リサーチ",
+              content: (
+                <ResearchSection
+                  providerSymbol={manualInstrument.provider_symbol}
+                  reports={manualResearchReports}
+                />
+              ),
+            },
           ]}
         />
 
@@ -194,10 +221,17 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
     instrumentType: info.instrumentType,
   };
 
-  const [quote, dailyPrices] = await Promise.all([
+  const [quote, dailyPrices, existingDbInstrument] = await Promise.all([
     provider.getQuote(providerSymbol).catch(() => null),
     provider.getDailyPrices(providerSymbol, tenYearsAgoIso(), todayIso()).catch(() => []),
+    findInstrumentByProviderSymbol(supabase, providerSymbol).catch(() => null),
   ]);
+  const [researchReports, financialMetrics] = existingDbInstrument
+    ? await Promise.all([
+        listResearchReports(supabase, existingDbInstrument.id).catch(() => []),
+        listFinancialMetrics(supabase, existingDbInstrument.id).catch(() => []),
+      ])
+    : [[], []];
 
   const lastClose = dailyPrices.at(-1)?.adjustedClose ?? null;
   const oneYearAgoIndex = Math.max(0, dailyPrices.length - 253);
@@ -321,10 +355,7 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
             id: "financials",
             label: "決算・財務",
             content: (
-              <UnavailableResearchPanel
-                title="決算・財務"
-                description="決算書と財務指標の実データは未接続です。接続後に更新日と対象期間を明示して表示します。"
-              />
+              <FinancialMetricsPanel providerSymbol={instrument.providerSymbol} metrics={financialMetrics} />
             ),
           },
           {
@@ -356,6 +387,11 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
                 evidence={outlook?.evidence ?? []}
               />
             ),
+          },
+          {
+            id: "research",
+            label: "リサーチ",
+            content: <ResearchSection providerSymbol={instrument.providerSymbol} reports={researchReports} />,
           },
         ]}
       />
