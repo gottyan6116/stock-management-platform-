@@ -169,4 +169,44 @@ describe("buildInvestmentEvidence", () => {
     expect(evidence.dataCoverage.management).toBe(0);
     expect(evidence.dataCoverage.overall).toBeCloseTo(2 / 7, 5);
   });
+
+  it("counts a paste_text report with no summary but non-empty rawContent toward research coverage (regression: pasted text is now usable by the AI, so it must count)", () => {
+    const evidence = buildInvestmentEvidence({
+      ...emptyEvidenceInputs(),
+      research: [
+        {
+          id: "rep1",
+          importMode: "paste_text",
+          researchDate: null,
+          researchModel: null,
+          summary: null,
+          rawContent: "Some pasted research text with real content.",
+          importedAt: "2026-08-20T00:00:00Z",
+          sourceName: "ChatGPT",
+          sourceType: "chatgpt",
+        },
+      ],
+    });
+    expect(evidence.dataCoverage.research).toBe(1);
+  });
+
+  it("does not count a report with neither summary nor rawContent toward research coverage", () => {
+    const evidence = buildInvestmentEvidence({
+      ...emptyEvidenceInputs(),
+      research: [
+        {
+          id: "rep1",
+          importMode: "paste_text",
+          researchDate: null,
+          researchModel: null,
+          summary: null,
+          rawContent: "   ",
+          importedAt: "2026-08-20T00:00:00Z",
+          sourceName: "ChatGPT",
+          sourceType: "chatgpt",
+        },
+      ],
+    });
+    expect(evidence.dataCoverage.research).toBe(0);
+  });
 });

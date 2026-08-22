@@ -17,6 +17,9 @@ export interface ResearchReportSummary {
   researchDate: string | null;
   researchModel: string | null;
   summary: string | null;
+  // paste_textモードはsummaryを持たないため、AI分析側で原文を読ませられるよう常に含める
+  // （UI一覧表示ではこれまで通りsummaryのみ使い、rawContentは分析プロンプト構築時にのみ参照する）。
+  rawContent: string;
   importedAt: string;
   sourceName: string | null;
   sourceType: Database["public"]["Tables"]["research_sources"]["Row"]["source_type"] | null;
@@ -243,7 +246,9 @@ export async function listResearchReports(
 ): Promise<ResearchReportSummary[]> {
   const { data, error } = await supabase
     .from("research_reports")
-    .select("id, import_mode, research_date, research_model, summary, imported_at, research_sources(source_name, source_type)")
+    .select(
+      "id, import_mode, research_date, research_model, summary, raw_content, imported_at, research_sources(source_name, source_type)"
+    )
     .eq("instrument_id", instrumentId)
     .order("imported_at", { ascending: false });
   if (error) throw error;
@@ -254,6 +259,7 @@ export async function listResearchReports(
     researchDate: row.research_date,
     researchModel: row.research_model,
     summary: row.summary,
+    rawContent: row.raw_content,
     importedAt: row.imported_at,
     sourceName: row.research_sources?.source_name ?? null,
     sourceType: row.research_sources?.source_type ?? null,
