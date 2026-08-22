@@ -417,3 +417,21 @@ export async function listResearchSources(
   if (error) throw error;
   return data ?? [];
 }
+
+type AnalysisRunRow = Database["public"]["Tables"]["analysis_runs"]["Row"];
+
+/** 銘柄に紐づく最新のAI分析結果を1件返す（無ければnull）。「AI分析」タブの初期表示・再訪時の表示に使う。 */
+export async function getLatestAnalysisRun(
+  supabase: SupabaseClient<Database>,
+  instrumentId: string
+): Promise<AnalysisRunRow | null> {
+  const { data, error } = await supabase
+    .from("analysis_runs")
+    .select("*")
+    .eq("instrument_id", instrumentId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}

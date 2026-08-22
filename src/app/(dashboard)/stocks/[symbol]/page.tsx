@@ -20,8 +20,9 @@ import { ResearchSection } from "@/components/research/ResearchSection";
 import { AnalyticsPanel } from "@/components/ui/AnalyticsPanel";
 import { isSampleResearchEnabled } from "@/config/research";
 import { getResearchOutlook } from "@/features/research/sample-outlooks";
-import { listResearchReports, listFinancialMetrics } from "@/server/repositories/evidence-repository";
+import { listResearchReports, listFinancialMetrics, getLatestAnalysisRun } from "@/server/repositories/evidence-repository";
 import { FinancialMetricsPanel } from "@/components/research/FinancialMetricsPanel";
+import { AiAnalysisPanel } from "@/components/research/AiAnalysisPanel";
 import { formatDate, formatDateTime, formatPercent } from "@/lib/utils/format";
 
 function UnavailableResearchPanel({ title, description }: { title: string; description: string }) {
@@ -57,10 +58,11 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
   ).catch(() => null);
 
   if (manualInstrument) {
-    const [priceHistory, manualResearchReports, manualFinancialMetrics] = await Promise.all([
+    const [priceHistory, manualResearchReports, manualFinancialMetrics, manualLatestAnalysisRun] = await Promise.all([
       listManualFundPrices(supabase, manualInstrument.id).catch(() => []),
       listResearchReports(supabase, manualInstrument.id).catch(() => []),
       listFinancialMetrics(supabase, manualInstrument.id).catch(() => []),
+      getLatestAnalysisRun(supabase, manualInstrument.id).catch(() => null),
     ]);
     const dailyPrices: DailyPrice[] = priceHistory.map((row) => ({
       tradingDate: row.price_date,
@@ -195,6 +197,16 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
                 />
               ),
             },
+            {
+              id: "ai-analysis",
+              label: "AI分析",
+              content: (
+                <AiAnalysisPanel
+                  providerSymbol={manualInstrument.provider_symbol}
+                  latestRun={manualLatestAnalysisRun}
+                />
+              ),
+            },
           ]}
         />
 
@@ -226,12 +238,13 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
     provider.getDailyPrices(providerSymbol, tenYearsAgoIso(), todayIso()).catch(() => []),
     findInstrumentByProviderSymbol(supabase, providerSymbol).catch(() => null),
   ]);
-  const [researchReports, financialMetrics] = existingDbInstrument
+  const [researchReports, financialMetrics, latestAnalysisRun] = existingDbInstrument
     ? await Promise.all([
         listResearchReports(supabase, existingDbInstrument.id).catch(() => []),
         listFinancialMetrics(supabase, existingDbInstrument.id).catch(() => []),
+        getLatestAnalysisRun(supabase, existingDbInstrument.id).catch(() => null),
       ])
-    : [[], []];
+    : [[], [], null];
 
   const lastClose = dailyPrices.at(-1)?.adjustedClose ?? null;
   const oneYearAgoIndex = Math.max(0, dailyPrices.length - 253);
@@ -392,6 +405,11 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
             id: "research",
             label: "リサーチ",
             content: <ResearchSection providerSymbol={instrument.providerSymbol} reports={researchReports} />,
+          },
+          {
+            id: "ai-analysis",
+            label: "AI分析",
+            content: <AiAnalysisPanel providerSymbol={instrument.providerSymbol} latestRun={latestAnalysisRun} />,
           },
         ]}
       />
