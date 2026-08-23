@@ -15,18 +15,31 @@ describe("buildStructuringSystemPrompt", () => {
     expect(prompt).toContain("operating_margin");
     expect(prompt).toContain("dividend_yield");
   });
+
+  it("lists the exact allowed sourceType, topic, and eventType values (regression: the model previously invented a sourceType outside the enum and failed schema validation)", () => {
+    const prompt = buildStructuringSystemPrompt();
+    expect(prompt).toContain("chatgpt");
+    expect(prompt).toContain("official_ir");
+    expect(prompt).toContain("guidance");
+    expect(prompt).toContain("shareholder_return");
+    expect(prompt).toContain("earnings");
+    expect(prompt).toContain("management_change");
+  });
 });
 
 describe("buildStructuringUserPrompt", () => {
-  it("embeds the company identity, research date, and raw content", () => {
+  it("embeds the company identity, research date, raw content, and known source", () => {
     const prompt = buildStructuringUserPrompt({
       rawContent: "NTTの2026年度1Q決算は営業収益+10.9%、営業利益+4.9%で増収増益だった。",
       company: { ticker: "9432.T", name: "NTT, Inc.", exchange: "Tokyo" },
       researchDate: "2026-08-22",
+      knownSource: { sourceName: "ChatGPT", sourceType: "chatgpt" },
     });
     expect(prompt).toContain("9432.T");
     expect(prompt).toContain("NTT, Inc.");
     expect(prompt).toContain("2026-08-22");
     expect(prompt).toContain("NTTの2026年度1Q決算");
+    expect(prompt).toContain("ChatGPT");
+    expect(prompt).toContain("chatgpt");
   });
 });
