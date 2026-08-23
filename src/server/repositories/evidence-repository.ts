@@ -239,21 +239,23 @@ export async function insertJsonImport(
   return { reportId: report.id, sourcesCreated: input.sources.length };
 }
 
-/** 銘柄に紐づく取り込み済みレポート一覧を新しい順で返す。表示用にsourceを1段joinする。 */
-export async function listResearchReports(
-  supabase: SupabaseClient<Database>,
-  instrumentId: string
-): Promise<ResearchReportSummary[]> {
-  const { data, error } = await supabase
-    .from("research_reports")
-    .select(
-      "id, import_mode, research_date, research_model, summary, raw_content, imported_at, research_sources(source_name, source_type)"
-    )
-    .eq("instrument_id", instrumentId)
-    .order("imported_at", { ascending: false });
-  if (error) throw error;
+const RESEARCH_REPORT_SELECT =
+  "id, import_mode, research_date, research_model, summary, raw_content, imported_at, source_id, research_sources(source_name, source_type)";
 
-  return (data ?? []).map((row) => ({
+type ResearchReportJoinRow = {
+  id: string;
+  import_mode: ResearchReportRow["import_mode"];
+  research_date: string | null;
+  research_model: string | null;
+  summary: string | null;
+  raw_content: string;
+  imported_at: string;
+  source_id: string | null;
+  research_sources: { source_name: string; source_type: ResearchReportSummary["sourceType"] } | null;
+};
+
+function mapResearchReportRow(row: ResearchReportJoinRow): ResearchReportSummary {
+  return {
     id: row.id,
     importMode: row.import_mode,
     researchDate: row.research_date,
@@ -263,7 +265,147 @@ export async function listResearchReports(
     importedAt: row.imported_at,
     sourceName: row.research_sources?.source_name ?? null,
     sourceType: row.research_sources?.source_type ?? null,
-  }));
+  };
+}
+
+/** 銘柄に紐づく取り込み済みレポート一覧を新しい順で返す。表示用にsourceを1段joinする。 */
+export async function listResearchReports(
+  supabase: SupabaseClient<Database>,
+  instrumentId: string
+): Promise<ResearchReportSummary[]> {
+  const { data, error } = await supabase
+    .from("research_reports")
+    .select(RESEARCH_REPORT_SELECT)
+    .eq("instrument_id", instrumentId)
+    .order("imported_at", { ascending: false });
+  if (error) throw error;
+
+  return (data ?? []).map(mapResearchReportRow);
+}
+
+export interface UpdateResearchReportParams {
+  sourceName?: string;
+  sourceType?: Database["public"]["Tables"]["research_sources"]["Row"]["source_type"];
+  sourceUrl?: string;
+  researchModel?: string;
+  rawContent?: string;
+  userNotes?: string;
+}
+
+/**
+ * paste_textモードのレポートのみ編集可能（json/manual_formは構造化データへのカスケードがあり
+ * 単純な上書きでは整合性が壊れるため対象外）。呼び出し側はUNSUPPORTED_MODEを個別にハンドリングすること。
+ * レポートが存在しない/他ユーザーのものの場合はnullを返す。
+ */
+export async function updateResearchReport(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  reportId: string,
+  params: UpdateResearchReportParams
+): Promise<ResearchReportSummary | null> {
+  const { data: existing, error: fetchError } = await supabase
+    .from("research_reports")
+    .select("id, source_id, import_mode")
+    .eq("id", reportId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (fetchError) throw fetchError;
+  if (!existing) return null;
+  if (existing.import_mode !== "paste_text") throw new Error("UNSUPPORTED_MODE");
+
+  const reportPatch: Database["public"]["Tables"]["research_reports"]["Update"] = {};
+  if (params.rawContent !== undefined) reportPatch.raw_content = params.rawContent;
+  if (params.researchModel !== undefined) reportPatch.research_model = params.researchModel;
+  if (params.userNotes !== undefined) reportPatch.user_notes = params.userNotes;
+  if (Object.keys(reportPatch).length > 0) {
+    const { error } = await supabase
+      .from("research_reports")
+      .update(reportPatch)
+      .eq("id", reportId)
+      .eq("user_id", userId);
+    if (error) throw error;
+  }
+
+  const sourcePatch: Database["public"]["Tables"]["research_sources"]["Update"] = {};
+  if (params.sourceName !== undefined) sourcePatch.source_name = params.sourceName;
+  if (params.sourceType !== undefined) sourcePatch.source_type = params.sourceType;
+  if (params.sourceUrl !== undefined) sourcePatch.source_url = params.sourceUrl;
+  if (existing.source_id && Object.keys(sourcePatch).length > 0) {
+    const { error } = await supabase
+      .from("research_sources")
+      .update(sourcePatch)
+      .eq("id", existing.source_id)
+      .eq("user_id", userId);
+    if (error) throw error;
+  }
+
+  const { data, error } = await supabase
+    .from("research_reports")
+    .select(RESEARCH_REPORT_SELECT)
+    .eq("id", reportId)
+    .single();
+  if (error) throw error;
+  return mapResearchReportRow(data);
+}
+
+const CASCADED_EVIDENCE_TABLES = [
+  "financial_metrics",
+  "management_statements",
+  "company_catalysts",
+  "company_risks",
+  "company_events",
+  "research_opinions",
+] as const;
+
+/**
+ * レポートと、そのレポートから作られたevidence（source_report_idで紐づく行）を削除する。
+ * research_sourcesとのFKはON DELETE SET NULLのため、削除順序による整合性エラーは起きない。
+ * レポートの主sourceは、削除後に他から一切参照されなくなっていれば併せて削除する（孤立行を残さないため）。
+ * 存在しない/他ユーザーのレポートの場合はfalseを返す。
+ */
+export async function deleteResearchReport(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  reportId: string
+): Promise<boolean> {
+  const { data: existing, error: fetchError } = await supabase
+    .from("research_reports")
+    .select("id, source_id")
+    .eq("id", reportId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (fetchError) throw fetchError;
+  if (!existing) return false;
+
+  for (const table of CASCADED_EVIDENCE_TABLES) {
+    const { error } = await supabase.from(table).delete().eq("source_report_id", reportId).eq("user_id", userId);
+    if (error) throw error;
+  }
+
+  const { error: deleteReportError } = await supabase
+    .from("research_reports")
+    .delete()
+    .eq("id", reportId)
+    .eq("user_id", userId);
+  if (deleteReportError) throw deleteReportError;
+
+  if (existing.source_id) {
+    const { count, error: countError } = await supabase
+      .from("research_reports")
+      .select("id", { count: "exact", head: true })
+      .eq("source_id", existing.source_id);
+    if (countError) throw countError;
+    if ((count ?? 0) === 0) {
+      const { error: deleteSourceError } = await supabase
+        .from("research_sources")
+        .delete()
+        .eq("id", existing.source_id)
+        .eq("user_id", userId);
+      if (deleteSourceError) throw deleteSourceError;
+    }
+  }
+
+  return true;
 }
 
 type FinancialMetricRow = Database["public"]["Tables"]["financial_metrics"]["Row"];
