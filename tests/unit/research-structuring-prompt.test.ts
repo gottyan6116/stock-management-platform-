@@ -25,6 +25,11 @@ describe("buildStructuringSystemPrompt", () => {
     expect(prompt).toContain("earnings");
     expect(prompt).toContain("management_change");
   });
+
+  it("instructs the model to write free-text fields in the same language as the source text (regression: summaries were coming back in English for Japanese input)", () => {
+    const prompt = buildStructuringSystemPrompt();
+    expect(prompt).toMatch(/same language/i);
+  });
 });
 
 describe("buildStructuringUserPrompt", () => {

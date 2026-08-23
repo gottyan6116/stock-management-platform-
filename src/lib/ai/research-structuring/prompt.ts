@@ -14,7 +14,8 @@ Rules:
 7. events[].eventType must be exactly one of these values (no others are accepted): ${eventTypeValues.join(", ")}; use "other" if nothing else fits.
 8. periodType is "FY" (full fiscal year) or "Q" (quarter). periodStart/periodEnd are that period's start/end dates.
 9. Give every source you use a short unique sourceKey, and reference it from each item you extract via that item's own sourceKey field, so the origin of every fact is traceable.
-10. Respond with ONLY a single JSON object, no markdown code fences, no explanation before or after the JSON, matching exactly this shape:
+10. Write every free-text field (summary, statement, description, title, etc.) in the SAME language as the source text you were given below — do not translate into English. If the source text is Japanese, write those fields in Japanese.
+11. Respond with ONLY a single JSON object, no markdown code fences, no explanation before or after the JSON, matching exactly this shape:
 {
   "company": { "ticker": string, "name": string, "exchange": string },
   "researchDate": string (YYYY-MM-DD),
