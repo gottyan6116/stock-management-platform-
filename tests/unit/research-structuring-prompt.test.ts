@@ -30,6 +30,12 @@ describe("buildStructuringSystemPrompt", () => {
     const prompt = buildStructuringSystemPrompt();
     expect(prompt).toMatch(/same language/i);
   });
+
+  it("instructs the model never to rescale a financial figure and to record the original unit instead (regression: '3,650億円' was extracted as value 365 -- a wrong order of magnitude -- because the prompt never explained the unit field)", () => {
+    const prompt = buildStructuringSystemPrompt();
+    expect(prompt).toMatch(/never convert or rescale/i);
+    expect(prompt).toContain("JPY_100M");
+  });
 });
 
 describe("buildStructuringUserPrompt", () => {
