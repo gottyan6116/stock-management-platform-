@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ResearchReportSummary } from "@/server/repositories/evidence-repository";
 import { ResearchImportForm } from "./ResearchImportForm";
+import { ResearchReportModal } from "./ResearchReportModal";
 import { formatDate } from "@/lib/utils/format";
 
 const SOURCE_TYPE_LABEL: Record<string, string> = {
@@ -28,6 +29,7 @@ export function ResearchSection({
   reports: ResearchReportSummary[];
 }) {
   const [showForm, setShowForm] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<ResearchReportSummary | null>(null);
 
   return (
     <div className="rounded-card border border-border bg-surface p-5">
@@ -49,16 +51,22 @@ export function ResearchSection({
       ) : (
         <ul className="mt-3 flex flex-col gap-2">
           {reports.map((report) => (
-            <li key={report.id} className="rounded-button border border-border p-3">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                <span className="rounded-button bg-surface-subtle px-2 py-0.5 font-semibold text-text-secondary">
-                  {report.sourceType ? (SOURCE_TYPE_LABEL[report.sourceType] ?? report.sourceType) : "—"}
-                </span>
-                <span>{report.sourceName ?? "情報源不明"}</span>
-                <span>·</span>
-                <span>{formatDate(report.researchDate ?? report.importedAt)}</span>
-              </div>
-              {report.summary ? <p className="mt-1 text-sm text-text-primary">{report.summary}</p> : null}
+            <li key={report.id}>
+              <button
+                type="button"
+                onClick={() => setSelectedReport(report)}
+                className="w-full rounded-button border border-border p-3 text-left hover:border-primary"
+              >
+                <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                  <span className="rounded-button bg-surface-subtle px-2 py-0.5 font-semibold text-text-secondary">
+                    {report.sourceType ? (SOURCE_TYPE_LABEL[report.sourceType] ?? report.sourceType) : "—"}
+                  </span>
+                  <span>{report.sourceName ?? "情報源不明"}</span>
+                  <span>·</span>
+                  <span>{formatDate(report.researchDate ?? report.importedAt)}</span>
+                </div>
+                {report.summary ? <p className="mt-1 text-sm text-text-primary">{report.summary}</p> : null}
+              </button>
             </li>
           ))}
         </ul>
@@ -68,6 +76,10 @@ export function ResearchSection({
         <div className="mt-4">
           <ResearchImportForm providerSymbol={providerSymbol} onDone={() => setShowForm(false)} />
         </div>
+      ) : null}
+
+      {selectedReport ? (
+        <ResearchReportModal report={selectedReport} onClose={() => setSelectedReport(null)} />
       ) : null}
     </div>
   );

@@ -67,6 +67,15 @@ export async function findInstrumentByProviderSymbol(
   return data;
 }
 
+export async function findInstrumentById(
+  supabase: SupabaseClient<Database>,
+  instrumentId: string
+): Promise<InstrumentRow | null> {
+  const { data, error } = await supabase.from("instruments").select("*").eq("id", instrumentId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 export async function upsertInstrument(
   supabase: SupabaseClient<Database>,
   instrument: InstrumentInsert

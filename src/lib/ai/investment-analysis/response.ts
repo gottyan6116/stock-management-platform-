@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { extractJsonFromAiResponse } from "@/lib/ai/extract-json";
 
 const caseSchema = z.object({
   thesis: z.string().min(1),
@@ -32,34 +33,10 @@ export const InvestmentAnalysisResultSchema = z.object({
 export type InvestmentAnalysisResult = z.infer<typeof InvestmentAnalysisResultSchema>;
 
 /**
- * モデルの生出力からJSON本体を取り出してZod検証する。
- * LLMはJSON前後に説明文やmarkdownのコードフェンス（```json ... ```）を付けることがあるため、
- * 文字列の場合は最初の '{' から最後の '}' までを抽出してからパースする。
- * Cloudflare Workers AIの一部モデル（例: llama-3.3-70b-instruct系）は出力がJSON形状だと
- * 判定すると result.response を文字列ではなくパース済みオブジェクトとして返すため、
- * オブジェクトが渡された場合はその場でZod検証する（再パースしない）。
+ * モデルの生出力をZod検証する。JSON抽出自体は共通ヘルパー（extractJsonFromAiResponse）に委譲する。
  */
 export function parseAnalysisResponse(raw: unknown): InvestmentAnalysisResult {
-  let parsedJson: unknown;
-
-  if (typeof raw === "string") {
-    const firstBrace = raw.indexOf("{");
-    const lastBrace = raw.lastIndexOf("}");
-    if (firstBrace === -1 || lastBrace === -1 || lastBrace < firstBrace) {
-      throw new Error(`AI response contained no JSON object: ${raw.slice(0, 200)}`);
-    }
-    const jsonText = raw.slice(firstBrace, lastBrace + 1);
-    try {
-      parsedJson = JSON.parse(jsonText);
-    } catch (err) {
-      throw new Error(`AI response JSON could not be parsed: ${(err as Error).message}`);
-    }
-  } else if (raw !== null && typeof raw === "object") {
-    parsedJson = raw;
-  } else {
-    throw new Error(`AI response was neither a JSON string nor an object (got ${typeof raw})`);
-  }
-
+  const parsedJson = extractJsonFromAiResponse(raw);
   const result = InvestmentAnalysisResultSchema.safeParse(parsedJson);
   if (!result.success) {
     const firstIssue = result.error.issues[0];

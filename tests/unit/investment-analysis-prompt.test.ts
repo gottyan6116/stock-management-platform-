@@ -73,6 +73,37 @@ describe("buildUserPrompt", () => {
     expect(prompt.toLowerCase()).toMatch(/no data|none|empty/);
   });
 
+  it("includes a raw-content excerpt for paste_text reports with no summary (regression: unstructured pasted research must reach the AI)", () => {
+    const evidence = buildInvestmentEvidence({
+      company,
+      market,
+      sources: [],
+      financials: [],
+      managementStatements: [],
+      catalysts: [],
+      risks: [],
+      events: [],
+      opinions: [],
+      research: [
+        {
+          id: "r1",
+          importMode: "paste_text",
+          researchDate: null,
+          researchModel: null,
+          summary: null,
+          rawContent: "NTTの2026年度1Q決算は営業収益+10.9%、営業利益+4.9%で増収増益だった。",
+          importedAt: "2026-08-20T00:00:00Z",
+          sourceName: "ChatGPT",
+          sourceType: "chatgpt",
+        },
+      ],
+    });
+    const quantScore = computeQuantScore(evidence.financials);
+    const prompt = buildUserPrompt(evidence, quantScore);
+    expect(prompt).toContain("NTTの2026年度1Q決算");
+    expect(prompt).toContain("UNSTRUCTURED PASTED TEXT");
+  });
+
   it("renders sources with evidenceClass and tags evidence items back to their source (regression: provenance must reach the AI)", () => {
     const evidence = buildInvestmentEvidence({
       company,

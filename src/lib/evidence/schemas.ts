@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { EventType, MetricKey, SourceType, StatementTopic } from "@/types/evidence";
 
-const sourceTypeValues: [SourceType, ...SourceType[]] = [
+export const sourceTypeValues: [SourceType, ...SourceType[]] = [
   "chatgpt",
   "claude",
   "gemini",
@@ -40,7 +40,7 @@ export const metricKeyValues: [MetricKey, ...MetricKey[]] = [
   "fcf_margin",
 ];
 
-const statementTopicValues: [StatementTopic, ...StatementTopic[]] = [
+export const statementTopicValues: [StatementTopic, ...StatementTopic[]] = [
   "guidance",
   "strategy",
   "margin",
@@ -55,7 +55,7 @@ const statementTopicValues: [StatementTopic, ...StatementTopic[]] = [
   "other",
 ];
 
-const eventTypeValues: [EventType, ...EventType[]] = [
+export const eventTypeValues: [EventType, ...EventType[]] = [
   "earnings",
   "guidance",
   "m_and_a",

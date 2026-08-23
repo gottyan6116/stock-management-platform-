@@ -58,6 +58,18 @@ function sourceTag(sourceId: string | null, tags: Map<string, string>): string {
   return tag ? ` [source: ${tag}]` : "";
 }
 
+// 「貼り付け」モードの取り込みは要約(summary)を持たないため、原文(raw_content)からの抜粋を
+// 分析プロンプトに含める。ここで切り詰めるのは、1件で数十KBに及ぶ貼り付けが
+// プロンプト全体のトークン予算を圧迫しないようにするため（本文自体はDBに全文保存済み）。
+const RAW_CONTENT_EXCERPT_LIMIT = 4000;
+
+function excerptRawContent(rawContent: string): string | null {
+  const trimmed = rawContent.trim();
+  if (trimmed.length === 0) return null;
+  if (trimmed.length <= RAW_CONTENT_EXCERPT_LIMIT) return trimmed;
+  return `${trimmed.slice(0, RAW_CONTENT_EXCERPT_LIMIT)}\n...(truncated, ${trimmed.length - RAW_CONTENT_EXCERPT_LIMIT} more characters not shown)`;
+}
+
 export function buildUserPrompt(evidence: InvestmentEvidence, quantScore: QuantScoreBreakdown): string {
   const parts: string[] = [];
   const sourceTags = buildSourceTagLookup(evidence.sources);
@@ -117,7 +129,16 @@ export function buildUserPrompt(evidence: InvestmentEvidence, quantScore: QuantS
       (o) => `${o.author}${o.organization ? ` (${o.organization})` : ""}: ${o.summary}${o.rating !== null ? ` [rating: ${o.rating}]` : ""}${sourceTag(o.sourceId, sourceTags)}`
     )
   );
-  parts.push(summarizeList("# Imported Research Reports", evidence.research, (r) => `${r.sourceName ?? "unknown source"} (${r.sourceType ?? "unknown type"}, ${r.researchDate ?? r.importedAt}): ${r.summary ?? "no summary (raw text archived but not analyzable — treat as absent evidence)"}`));
+  parts.push(
+    summarizeList("# Imported Research Reports", evidence.research, (r) => {
+      const header = `${r.sourceName ?? "unknown source"} (${r.sourceType ?? "unknown type"}, ${r.researchDate ?? r.importedAt})`;
+      if (r.summary) return `${header}: ${r.summary}`;
+      const excerpt = excerptRawContent(r.rawContent);
+      return excerpt
+        ? `${header} [UNSTRUCTURED PASTED TEXT — not yet reviewed or fact-checked by a human, extract only what is clearly stated and treat cautiously]:\n${excerpt}`
+        : `${header}: no content`;
+    })
+  );
   parts.push(
     `# Data Coverage\n${JSON.stringify(evidence.dataCoverage)}`
   );

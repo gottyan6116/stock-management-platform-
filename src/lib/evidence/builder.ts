@@ -89,10 +89,10 @@ function computeDataCoverage(input: BuildEvidenceInput): DataCoverage {
   const risks = coverageOf(input.risks.length);
   const events = coverageOf(input.events.length);
   const opinions = coverageOf(input.opinions.length);
-  // summaryが無いレポート（例: paste_textモードで貼り付けただけの生テキスト）は
-  // buildUserPromptがAIへ内容を渡せない（"no summary"としか表示できない）ため、
-  // カバレッジ上も「実質的に読める内容がある」とはみなさない。
-  const research = coverageOf(input.research.filter((r) => r.summary !== null).length);
+  // summaryもraw_contentも空のレポート（理論上は起きないはずだが防御的に）だけを
+  // 「実質的に読める内容がない」として除外する。buildUserPromptはsummaryが無くても
+  // raw_contentの抜粋をAIへ渡せるため、paste_textモードの取り込みもカバレッジに含めてよい。
+  const research = coverageOf(input.research.filter((r) => r.summary !== null || r.rawContent.trim().length > 0).length);
   const categories = [financials, management, catalysts, risks, events, opinions, research];
   const overall = categories.reduce((sum, value) => sum + value, 0) / categories.length;
   return { financials, management, catalysts, risks, events, opinions, research, overall };
