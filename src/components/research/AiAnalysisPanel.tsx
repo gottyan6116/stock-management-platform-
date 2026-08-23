@@ -7,6 +7,7 @@ import type { Database } from "@/types/supabase";
 import { AnalyticsPanel } from "@/components/ui/AnalyticsPanel";
 import { formatDateTime } from "@/lib/utils/format";
 import type { InvestmentAnalysisResult } from "@/lib/ai/investment-analysis/response";
+import { METRIC_KEY_LABEL } from "./ManualMetricForm";
 
 type AnalysisRunRow = Database["public"]["Tables"]["analysis_runs"]["Row"];
 
@@ -14,6 +15,109 @@ type AnalysisRunRow = Database["public"]["Tables"]["analysis_runs"]["Row"];
 // but analysis_runs only persists the total, not the breakdown -- so the max is hardcoded here to
 // match that invariant rather than recomputed from data we don't have at display time.
 const QUANT_SCORE_MAX = 70;
+
+interface StoredCategoryScore {
+  score: number | null;
+  maxScore: number;
+  reason: string;
+}
+
+interface StoredQuantScore {
+  growth: StoredCategoryScore;
+  profitability: StoredCategoryScore;
+  financialHealth: StoredCategoryScore;
+  cashFlow: StoredCategoryScore;
+  valuation: StoredCategoryScore;
+  shareholderReturn: StoredCategoryScore;
+}
+
+interface StoredDataCoverage {
+  financials: number;
+  management: number;
+  catalysts: number;
+  risks: number;
+  events: number;
+  opinions: number;
+  research: number;
+}
+
+interface StoredFinancialMetric {
+  metricKey: string;
+  value: number;
+  periodType: "FY" | "Q";
+  periodEnd: string;
+}
+
+/**
+ * analysis_runs.input_snapshotは新設のquantScore/dataCoverageキーを持たない古い行もあり得る
+ * （マイグレーション無しでjsonbに追記しただけのため）。すべて任意扱いで安全に読む。
+ */
+function readInputSnapshot(run: AnalysisRunRow): {
+  quantScore: StoredQuantScore | null;
+  dataCoverage: StoredDataCoverage | null;
+  financials: StoredFinancialMetric[];
+} {
+  const snap = run.input_snapshot as Record<string, unknown> | null;
+  if (!snap || typeof snap !== "object") return { quantScore: null, dataCoverage: null, financials: [] };
+  return {
+    quantScore: (snap.quantScore as StoredQuantScore | undefined) ?? null,
+    dataCoverage: (snap.dataCoverage as StoredDataCoverage | undefined) ?? null,
+    financials: Array.isArray(snap.financials) ? (snap.financials as StoredFinancialMetric[]) : [],
+  };
+}
+
+const QUANT_CATEGORY_LABEL: Record<keyof StoredQuantScore, string> = {
+  growth: "成長性",
+  profitability: "収益性",
+  financialHealth: "財務健全性",
+  cashFlow: "キャッシュフロー",
+  valuation: "バリュエーション",
+  shareholderReturn: "株主還元",
+};
+
+const DATA_COVERAGE_LABEL: Record<keyof StoredDataCoverage, string> = {
+  financials: "決算・財務",
+  management: "経営陣発言",
+  catalysts: "カタリスト",
+  risks: "リスク",
+  events: "重要発表・イベント",
+  opinions: "アナリスト意見",
+  research: "リサーチ資料",
+};
+
+// 推移グラフに使う指標の優先順位。売上高のように絶対額が大きく動く指標を優先し、
+// 見つからなければ他の指標にフォールバックする。
+const TREND_METRIC_PRIORITY: string[] = [
+  "revenue",
+  "operating_income",
+  "net_income",
+  "eps",
+  "operating_margin",
+  "net_margin",
+];
+
+interface TrendPoint {
+  periodEnd: string;
+  value: number;
+}
+
+/** 同一metricKey・同一periodTypeで2期分以上の値がある指標を優先順位に沿って探す。無ければnull。 */
+function findTrendMetric(financials: StoredFinancialMetric[]): { metricKey: string; periodType: "FY" | "Q"; points: TrendPoint[] } | null {
+  for (const metricKey of TREND_METRIC_PRIORITY) {
+    for (const periodType of ["FY", "Q"] as const) {
+      const matches = financials.filter((m) => m.metricKey === metricKey && m.periodType === periodType);
+      const distinctPeriods = Array.from(new Set(matches.map((m) => m.periodEnd))).sort();
+      if (distinctPeriods.length >= 2) {
+        const points = distinctPeriods.map((periodEnd) => ({
+          periodEnd,
+          value: matches.find((m) => m.periodEnd === periodEnd)!.value,
+        }));
+        return { metricKey, periodType, points };
+      }
+    }
+  }
+  return null;
+}
 
 async function runAnalysis(providerSymbol: string) {
   const res = await fetch("/api/analysis/run", {
@@ -140,6 +244,134 @@ function BulletList({ items, tone, emptyLabel }: { items: string[]; tone: Tone; 
   );
 }
 
+/**
+ * quant-score.tsのreasonは固定テンプレートの英語文字列（例: "operating_margin=11.75",
+ * "no data (needs one of: current_ratio, net_debt_ebitda)"）。テンプレートは少数・固定なので、
+ * パターンマッチで日本語表示に変換する。未知の形式が来た場合は元の文字列をそのまま表示する
+ * （フォーマットが変わってもクラッシュしない安全側フォールバック）。
+ */
+function localizeQuantReason(reason: string): string {
+  const noDataOneOf = reason.match(/^no data \(needs one of: (.+)\)$/);
+  if (noDataOneOf) {
+    const keys = noDataOneOf[1]!.split(", ").map((k) => METRIC_KEY_LABEL[k.trim() as keyof typeof METRIC_KEY_LABEL] ?? k.trim());
+    return `データなし（${keys.join("・")}のいずれかが必要）`;
+  }
+  if (reason.startsWith("no data (needs revenue or eps")) {
+    return "データなし（売上高またはEPSが同一期間タイプで2期分必要）";
+  }
+  const growthMatch = reason.match(/^(revenue|eps) YoY growth (-?[\d.]+)% \((FY|Q)\)$/);
+  if (growthMatch) {
+    const [, key, pct, periodType] = growthMatch;
+    const label = METRIC_KEY_LABEL[key as keyof typeof METRIC_KEY_LABEL] ?? key;
+    return `${label} 前年同期比 ${pct}%（${periodType === "FY" ? "通期" : "四半期"}）`;
+  }
+  if (/^[a-z_]+=-?[\d.]+/.test(reason)) {
+    return reason
+      .split(", ")
+      .map((part) => {
+        const [key, value] = part.split("=");
+        if (!key || value === undefined) return part;
+        return `${METRIC_KEY_LABEL[key as keyof typeof METRIC_KEY_LABEL] ?? key}=${value}`;
+      })
+      .join("、");
+  }
+  return reason;
+}
+
+function QuantBreakdownRow({ label, category }: { label: string; category: StoredCategoryScore }) {
+  const tone = scoreTone(category.score, category.maxScore);
+  const s = TONE[tone];
+  const pct = category.score !== null ? Math.min(100, Math.max(0, (category.score / category.maxScore) * 100)) : 0;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-xs font-semibold text-text-secondary">{label}</p>
+        <p className={`text-xs font-bold tabular-nums ${s.text}`}>
+          {category.score !== null ? category.score.toFixed(1) : "—"} / {category.maxScore}
+        </p>
+      </div>
+      <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-surface-subtle">
+        <div
+          className={`h-full rounded-full ${s.dot}`}
+          style={{ width: `${pct}%`, transition: "width 0.6s ease" }}
+        />
+      </div>
+      <p className="mt-0.5 text-[11px] text-text-muted">{localizeQuantReason(category.reason)}</p>
+    </div>
+  );
+}
+
+/** 定量スコアの内訳（6カテゴリ）を棒グラフで示す。algorithm-computedであることをUIで明示し、
+ * AIの定性スコアとは別軸であることの根拠をユーザーが確認できるようにする。 */
+function QuantScoreBreakdown({ quantScore }: { quantScore: StoredQuantScore }) {
+  return (
+    <div className="rounded-card border border-border p-3">
+      <p className="text-xs font-semibold text-text-muted">
+        定量スコアの内訳 <span className="font-normal text-text-muted">（コードによる自動算出・登録済み財務指標のみを使用）</span>
+      </p>
+      <div className="mt-3 flex flex-col gap-3">
+        {(Object.keys(QUANT_CATEGORY_LABEL) as (keyof StoredQuantScore)[]).map((key) => (
+          <QuantBreakdownRow key={key} label={QUANT_CATEGORY_LABEL[key]} category={quantScore[key]} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** どの評価カテゴリにデータが接続済みかを一覧で示す。未接続を灰色で明示し、「本当にデータが無いのか、
+ * 取りに行っていないだけなのか」をユーザーが判別できるようにする。 */
+function DataCoverageLegend({ coverage }: { coverage: StoredDataCoverage }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {(Object.keys(DATA_COVERAGE_LABEL) as (keyof StoredDataCoverage)[]).map((key) => {
+        const connected = coverage[key] > 0;
+        return (
+          <span
+            key={key}
+            className={`flex items-center gap-1.5 rounded-button border px-2 py-1 text-[11px] font-semibold ${
+              connected ? `${TONE.positive.border} ${TONE.positive.bg} ${TONE.positive.text}` : "border-border bg-surface-subtle text-text-muted"
+            }`}
+          >
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${connected ? TONE.positive.dot : TONE.muted.dot}`} aria-hidden />
+            {DATA_COVERAGE_LABEL[key]}
+            {!connected ? "（未接続）" : null}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 決算・財務タブに2期分以上ある指標を折れ線的な棒グラフで示す、実データに基づく推移チャート。
+ * 該当する指標が無ければ何も描画しない（データが少ない銘柄では自然に非表示になる）。 */
+function MetricTrendChart({ metricKey, periodType, points }: { metricKey: string; periodType: "FY" | "Q"; points: TrendPoint[] }) {
+  const max = Math.max(...points.map((p) => Math.abs(p.value)), 1);
+  const label = METRIC_KEY_LABEL[metricKey as keyof typeof METRIC_KEY_LABEL] ?? metricKey;
+  return (
+    <div className="rounded-card border border-border p-3">
+      <p className="text-xs font-semibold text-text-muted">
+        {label}の推移 <span className="font-normal text-text-muted">（{periodType === "FY" ? "通期" : "四半期"}・登録済み実データ）</span>
+      </p>
+      <div className="mt-3 flex items-end gap-3" style={{ height: 96 }}>
+        {points.map((p, i) => {
+          const heightPct = Math.max(4, (Math.abs(p.value) / max) * 100);
+          const isLatest = i === points.length - 1;
+          return (
+            <div key={p.periodEnd} className="flex flex-1 flex-col items-center justify-end gap-1">
+              <span className="text-[11px] font-bold tabular-nums text-text-primary">{p.value.toLocaleString()}</span>
+              <div
+                className={`w-full rounded-t ${isLatest ? "bg-primary" : "bg-primary-soft"}`}
+                style={{ height: `${heightPct}%`, transition: "height 0.6s ease" }}
+              />
+              <span className="text-[10px] text-text-muted">{p.periodEnd}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function AnalysisResultView({ run }: { run: AnalysisRunRow }) {
   const result = run.result_json as unknown as InvestmentAnalysisResult | null;
   if (!result) {
@@ -150,12 +382,17 @@ function AnalysisResultView({ run }: { run: AnalysisRunRow }) {
     );
   }
 
+  const { quantScore, dataCoverage, financials } = readInputSnapshot(run);
+  const trend = findTrendMetric(financials);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-text-muted">
         <span>最終分析: {formatDateTime(run.created_at)}</span>
         <span>モデル: {run.model}</span>
       </div>
+
+      {dataCoverage ? <DataCoverageLegend coverage={dataCoverage} /> : null}
 
       <div
         className="rounded-card border border-border p-4"
@@ -174,6 +411,12 @@ function AnalysisResultView({ run }: { run: AnalysisRunRow }) {
         <ScoreTile label="長期（3〜5年+）" score={result.longTerm.score} rating={result.longTerm.rating} />
         <ScoreTile label="分析の確信度" score={result.confidence} />
       </div>
+      <p className="text-[11px] text-text-muted">
+        定量スコアはコードによる自動算出（財務指標のみ・判断を含まない）、中期・長期・確信度はAIによる総合判断です。両者は異なる軸のため、数値が一致するとは限りません。
+      </p>
+
+      {quantScore ? <QuantScoreBreakdown quantScore={quantScore} /> : null}
+      {trend ? <MetricTrendChart metricKey={trend.metricKey} periodType={trend.periodType} points={trend.points} /> : null}
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <InfoCard label="中期（1〜3年）判断材料" accent="var(--primary)">

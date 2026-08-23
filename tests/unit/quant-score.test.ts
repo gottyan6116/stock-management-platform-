@@ -78,6 +78,27 @@ describe("computeQuantScore", () => {
     expect(result.growth.score).toBeCloseTo(15, 5);
   });
 
+  it("scores profitability from a quarterly (Q) operating_margin, not only FY (regression: ratio metrics were invisible to scoring unless tagged FY, even though margins/multiples are period-length-invariant and the app's AI-structured research typically tags them Q)", () => {
+    const result = computeQuantScore([metric("operating_margin", 20, "2026-06-30", "2026-04-01", "Q")]);
+    expect(result.profitability.score).toBeCloseTo(15, 5);
+  });
+
+  it("prefers a more recent Q-period ratio value over an older FY one when both exist (latest by periodEnd, regardless of periodType)", () => {
+    const result = computeQuantScore([
+      metric("operating_margin", 0, "2025-03-31", "2024-04-01", "FY"),
+      metric("operating_margin", 20, "2026-06-30", "2026-04-01", "Q"),
+    ]);
+    expect(result.profitability.score).toBeCloseTo(15, 5);
+  });
+
+  it("falls back to quarterly YoY growth when only Q-period data exists, without mixing FY and Q (regression companion to the FY-only growth test above)", () => {
+    const result = computeQuantScore([
+      metric("revenue", 1000, "2026-03-31", "2025-10-01", "Q"),
+      metric("revenue", 1200, "2027-03-31", "2026-10-01", "Q"),
+    ]);
+    expect(result.growth.score).toBeCloseTo(15, 5);
+  });
+
   it("scores profitability from operating_margin and roe as the average of both bands", () => {
     const result = computeQuantScore([
       metric("operating_margin", 10, "2026-03-31"), // midpoint of 0-20 band -> 0.5 fraction

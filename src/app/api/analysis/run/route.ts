@@ -237,7 +237,10 @@ export async function POST(request: NextRequest) {
         model: provider.modelName,
         analysis_version: ANALYSIS_VERSION,
         scoring_version: SCORING_VERSION,
-        input_snapshot: { ...evidence },
+        // quantScoreの内訳（カテゴリ別スコア・満点・算出根拠）はanalysis_runsに専用列を持たないため、
+        // input_snapshot（jsonb、形状を強制されない）に同居させる。UI側の「スコアの内訳」表示が
+        // これを読む。マイグレーションを増やさずに済ませるための意図的な選択（P8）。
+        input_snapshot: { ...evidence, quantScore },
         evidence_hash: evidenceHash,
         quant_score: quantScore.total,
         medium_score: analysis.mediumTerm.score,

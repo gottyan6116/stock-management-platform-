@@ -25,11 +25,15 @@ export interface QuantScoreBreakdown {
 
 /**
  * 指定したmetric_keyの中で最新期末日のFinancialMetricを返す（同一期末日が複数あれば最初に見つかったもの）。
- * periodTypeで絞り込む（既定FY）— 四半期値と通期値は水準が異なるため混在させない
- * （例: 四半期ROEは通期の約1/4になり得るなど、期間タイプをまたぐ比較は指標を歪める）。
+ * periodTypeを指定した場合のみそれで絞り込む。省略時はFY/Qを問わず最新の値を返す —
+ * categoryScore()が扱うのは比率指標（利益率・PER/PBR・配当利回り等）のみで、これらは
+ * 通期換算しても四半期換算しても水準が大きく変わらない「期間長に対して不変な指標」のため、
+ * 期間タイプで絞り込む必要がない（絞り込むと、四半期データしか無い銘柄で常にnullになってしまう）。
+ * 一方、売上高等の絶対額（フロー指標）は期間タイプをまたぐと水準が歪む — そちらはyoyGrowthPercent側で
+ * 明示的にperiodTypeを指定して同一期間タイプ同士のみ比較する。
  */
-function latestMetric(financials: FinancialMetric[], key: MetricKey, periodType: "FY" | "Q" = "FY"): FinancialMetric | null {
-  const matches = financials.filter((m) => m.metricKey === key && m.periodType === periodType);
+function latestMetric(financials: FinancialMetric[], key: MetricKey, periodType?: "FY" | "Q"): FinancialMetric | null {
+  const matches = financials.filter((m) => m.metricKey === key && (periodType === undefined || m.periodType === periodType));
   if (matches.length === 0) return null;
   return matches.reduce((a, b) => (a.periodEnd >= b.periodEnd ? a : b));
 }
@@ -96,18 +100,22 @@ const CASH_FLOW_MAX = 10;
 const VALUATION_MAX = 15;
 const SHAREHOLDER_RETURN_MAX = 5;
 
+// FY同士・Q同士では比較するが、FYとQを混ぜて比較はしない（四半期売上とFY売上は水準が違うため）。
+// 四半期データしか登録されていない銘柄でも成長率を採点できるよう、FYで2期分見つからなければQで再試行する。
 function scoreGrowth(financials: FinancialMetric[]): CategoryScore {
-  const revenueGrowth = yoyGrowthPercent(financials, "revenue");
-  if (revenueGrowth !== null) {
-    const fraction = normalize(revenueGrowth, 0, 15);
-    return { score: fraction * GROWTH_MAX, maxScore: GROWTH_MAX, reason: `revenue YoY growth ${revenueGrowth.toFixed(1)}%` };
+  for (const periodType of ["FY", "Q"] as const) {
+    const revenueGrowth = yoyGrowthPercent(financials, "revenue", periodType);
+    if (revenueGrowth !== null) {
+      const fraction = normalize(revenueGrowth, 0, 15);
+      return { score: fraction * GROWTH_MAX, maxScore: GROWTH_MAX, reason: `revenue YoY growth ${revenueGrowth.toFixed(1)}% (${periodType})` };
+    }
+    const epsGrowth = yoyGrowthPercent(financials, "eps", periodType);
+    if (epsGrowth !== null) {
+      const fraction = normalize(epsGrowth, 0, 15);
+      return { score: fraction * GROWTH_MAX, maxScore: GROWTH_MAX, reason: `eps YoY growth ${epsGrowth.toFixed(1)}% (${periodType})` };
+    }
   }
-  const epsGrowth = yoyGrowthPercent(financials, "eps");
-  if (epsGrowth !== null) {
-    const fraction = normalize(epsGrowth, 0, 15);
-    return { score: fraction * GROWTH_MAX, maxScore: GROWTH_MAX, reason: `eps YoY growth ${epsGrowth.toFixed(1)}%` };
-  }
-  return { score: null, maxScore: GROWTH_MAX, reason: "no data (needs revenue or eps in at least 2 periods)" };
+  return { score: null, maxScore: GROWTH_MAX, reason: "no data (needs revenue or eps in at least 2 periods of the same period type)" };
 }
 
 export function computeQuantScore(financials: FinancialMetric[]): QuantScoreBreakdown {
