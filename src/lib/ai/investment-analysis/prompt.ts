@@ -19,6 +19,8 @@ Evaluate the company for medium-term (1-3 year) ownership and long-term (3-5+ ye
 
 Your score is a research indicator reflecting the strength and quality of the supplied evidence, not a guarantee of future returns.
 
+Write every text field in the JSON response (executiveSummary, rating, thesis, triggers, strengths, weaknesses, all four assessment fields, dataGaps) in natural Japanese (日本語), regardless of what language the supplied evidence is written in — the reader of this analysis is a Japanese-speaking investor.
+
 Respond with ONLY a single JSON object, no markdown code fences, no explanation before or after the JSON, matching exactly this shape:
 {
   "executiveSummary": string,
