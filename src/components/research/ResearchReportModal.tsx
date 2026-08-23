@@ -43,6 +43,15 @@ async function deleteReport(id: string) {
   return res.json();
 }
 
+async function structureReport(id: string) {
+  const res = await fetch(`/api/research/reports/${id}/structure`, { method: "POST" });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    throw new Error(payload?.error?.message ?? `structure failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export function ResearchReportModal({
   report,
   onClose,
@@ -70,6 +79,15 @@ export function ResearchReportModal({
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteReport(report.id),
+    onSuccess: () => {
+      router.refresh();
+      onClose();
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const structureMutation = useMutation({
+    mutationFn: () => structureReport(report.id),
     onSuccess: () => {
       router.refresh();
       onClose();
@@ -184,13 +202,24 @@ export function ResearchReportModal({
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => setIsEditing(true)}
-                className="rounded-button border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary hover:text-primary"
-              >
-                編集
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => structureMutation.mutate()}
+                  disabled={structureMutation.isPending}
+                  title="本文をAIが読み取り、財務指標・経営陣発言・カタリスト・リスク等に自動分類します"
+                  className="rounded-button border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary hover:text-primary disabled:opacity-60"
+                >
+                  {structureMutation.isPending ? "AI構造化中..." : "AIで構造化"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="rounded-button border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary hover:text-primary"
+                >
+                  編集
+                </button>
+              </div>
             )
           ) : null}
         </div>
