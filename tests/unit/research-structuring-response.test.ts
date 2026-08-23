@@ -52,4 +52,11 @@ describe("parseStructuringResponse", () => {
   it("throws a descriptive error for text with no JSON object at all", () => {
     expect(() => parseStructuringResponse("I could not extract anything.")).toThrow(/JSON/);
   });
+
+  it("defaults a missing array field to empty instead of failing validation (regression: the model sometimes omits an empty category's key entirely, e.g. investorOpinions, rather than sending [])", () => {
+    const payload = validPayload() as Record<string, unknown>;
+    delete payload.investorOpinions;
+    const result = parseStructuringResponse(JSON.stringify(payload));
+    expect(result.investorOpinions).toEqual([]);
+  });
 });

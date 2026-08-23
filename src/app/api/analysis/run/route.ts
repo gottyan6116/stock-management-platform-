@@ -21,11 +21,18 @@ import type { CompanySnapshot, MarketSnapshot } from "@/lib/evidence/builder";
 import { computeEvidenceHash } from "@/lib/evidence/hash";
 import { computeQuantScore } from "@/lib/scoring/quant-score";
 import { getInvestmentAnalysisProvider } from "@/lib/ai/investment-analysis/get-provider";
+import { structureResearchReport } from "@/server/services/structure-research-report";
 
 // Cloudflare Workers AIの生成に数十秒かかることがあり（cloudflare-provider.tsのfetchタイムアウトは60秒）、
 // Vercelの既定のFunction実行時間（Hobby: 10秒 / Pro: 15秒）ではその前にプラットフォーム側に強制終了され、
 // analysis_runsへの保存もエラーハンドリングも行われないまま生の504になってしまう。明示的に延長する。
-export const maxDuration = 60;
+// 分析本体のAI呼び出しに加え、未構造化レポートの自動構造化（最大MAX_AUTO_STRUCTURE_PER_RUN件・並列）も
+// この中で行うため、P6時点の60秒から余裕を持たせている。
+export const maxDuration = 90;
+
+// 1回の分析実行で自動構造化するpaste_textレポートの上限。無制限にすると銘柄によっては
+// maxDurationを超えかねないため、超過分は次回の分析実行または手動の「AIで構造化」ボタンに委ねる。
+const MAX_AUTO_STRUCTURE_PER_RUN = 2;
 
 const requestSchema = z.object({
   providerSymbol: z.string().trim().min(1),
@@ -115,6 +122,29 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // 貼り付け（paste_text）のまま未構造化のレポートがあると、決算・財務や開示・発言の各tabにも
+    // financial_metrics等の実データとして反映されず、AI分析も「データ不足」と誤って報告してしまう
+    // （生テキストの抜粋はprompt.ts側で読めるが、定量スコアや他タブへは反映されない）。
+    // 分析前に自動でAI構造化することで、ユーザーが個別に「AIで構造化」を押さなくても
+    // リサーチタブに貼り付けた内容が全体に反映されるようにする。1件失敗しても分析自体は継続する
+    // （raw_content抜粋へのフォールバックが既にprompt.ts側にある）。
+    const reportsBeforeStructuring = await listResearchReports(supabase, instrumentId).catch(() => []);
+    const unstructuredReports = reportsBeforeStructuring
+      .filter((r) => r.importMode === "paste_text")
+      .slice(0, MAX_AUTO_STRUCTURE_PER_RUN);
+    if (unstructuredReports.length > 0) {
+      const outcomes = await Promise.allSettled(
+        unstructuredReports.map((r) => structureResearchReport(supabase, user.id, r.id))
+      );
+      outcomes.forEach((outcome, i) => {
+        if (outcome.status === "rejected") {
+          console.error(`auto-structure failed for report ${unstructuredReports[i]!.id}:`, outcome.reason);
+        } else if (outcome.value.status === "failed") {
+          console.error(`auto-structure failed for report ${unstructuredReports[i]!.id}:`, outcome.value.error);
+        }
+      });
+    }
+
     const [financials, managementStatements, catalysts, risks, events, opinions, research, sources] = await Promise.all([
       listFinancialMetrics(supabase, instrumentId),
       listManagementStatements(supabase, instrumentId),

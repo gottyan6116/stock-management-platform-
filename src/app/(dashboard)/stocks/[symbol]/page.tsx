@@ -20,8 +20,15 @@ import { ResearchSection } from "@/components/research/ResearchSection";
 import { AnalyticsPanel } from "@/components/ui/AnalyticsPanel";
 import { isSampleResearchEnabled } from "@/config/research";
 import { getResearchOutlook } from "@/features/research/sample-outlooks";
-import { listResearchReports, listFinancialMetrics, getLatestAnalysisRun } from "@/server/repositories/evidence-repository";
+import {
+  listResearchReports,
+  listFinancialMetrics,
+  listManagementStatements,
+  listCompanyEvents,
+  getLatestAnalysisRun,
+} from "@/server/repositories/evidence-repository";
 import { FinancialMetricsPanel } from "@/components/research/FinancialMetricsPanel";
+import { DisclosureStatementsPanel } from "@/components/research/DisclosureStatementsPanel";
 import { AiAnalysisPanel } from "@/components/research/AiAnalysisPanel";
 import { formatDate, formatDateTime, formatPercent } from "@/lib/utils/format";
 
@@ -238,13 +245,15 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
     provider.getDailyPrices(providerSymbol, tenYearsAgoIso(), todayIso()).catch(() => []),
     findInstrumentByProviderSymbol(supabase, providerSymbol).catch(() => null),
   ]);
-  const [researchReports, financialMetrics, latestAnalysisRun] = existingDbInstrument
+  const [researchReports, financialMetrics, managementStatements, companyEvents, latestAnalysisRun] = existingDbInstrument
     ? await Promise.all([
         listResearchReports(supabase, existingDbInstrument.id).catch(() => []),
         listFinancialMetrics(supabase, existingDbInstrument.id).catch(() => []),
+        listManagementStatements(supabase, existingDbInstrument.id).catch(() => []),
+        listCompanyEvents(supabase, existingDbInstrument.id).catch(() => []),
         getLatestAnalysisRun(supabase, existingDbInstrument.id).catch(() => null),
       ])
-    : [[], [], null];
+    : [[], [], [], [], null];
 
   const lastClose = dailyPrices.at(-1)?.adjustedClose ?? null;
   const oneYearAgoIndex = Math.max(0, dailyPrices.length - 253);
@@ -384,12 +393,7 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
           {
             id: "statements",
             label: "開示・発言",
-            content: (
-              <UnavailableResearchPanel
-                title="開示・発言"
-                description="適時開示、決算説明資料、経営者や投資家の発言データは未接続です。未確認の内容は表示していません。"
-              />
-            ),
+            content: <DisclosureStatementsPanel statements={managementStatements} events={companyEvents} />,
           },
           {
             id: "evidence",
