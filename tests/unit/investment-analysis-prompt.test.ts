@@ -33,6 +33,11 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toMatch(/medium-term/i);
     expect(prompt).toMatch(/long-term/i);
   });
+
+  it("instructs the model to write its response in Japanese regardless of evidence language (regression: analysis text was coming back in English)", () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toMatch(/japanese|日本語/i);
+  });
 });
 
 describe("buildUserPrompt", () => {
