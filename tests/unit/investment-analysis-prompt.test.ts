@@ -38,6 +38,26 @@ describe("buildSystemPrompt", () => {
     const prompt = buildSystemPrompt();
     expect(prompt).toMatch(/japanese|日本語/i);
   });
+
+  it("instructs the model to explicitly state when a data category has zero coverage rather than writing generic filler (regression: sections read as filler instead of citing real gaps)", () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toMatch(/data coverage/i);
+    expect(prompt).toMatch(/must not write as if you evaluated it|未接続/i);
+  });
+
+  it("maps each of the four assessment fields to a distinct primary evidence category so sections don't duplicate each other", () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toMatch(/managementAssessment/);
+    expect(prompt).toMatch(/financialAssessment/);
+    expect(prompt).toMatch(/valuationAssessment/);
+    expect(prompt).toMatch(/competitiveAssessment/);
+    expect(prompt).toMatch(/different evidence category/i);
+  });
+
+  it("explains that the deterministic quant score and the AI's own medium/long-term scores are different axes, not the same number on two scales", () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toMatch(/different axes/i);
+  });
 });
 
 describe("buildUserPrompt", () => {
