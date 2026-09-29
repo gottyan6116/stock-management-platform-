@@ -9,7 +9,8 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Briefcase, History } from "lucide-react";
 import { PortfolioCompositionDonut } from "@/components/charts/PortfolioCompositionDonut";
 import { EvidenceCoveragePanel } from "@/components/research/EvidenceCoveragePanel";
-import { GlobalStockSearch } from "@/components/search/GlobalStockSearch";
+import { PageHeader } from "@/components/app-shell/PageHeader";
+import { getNavLabel } from "@/config/navigation";
 import { AnalyticsPanel } from "@/components/ui/AnalyticsPanel";
 import { Skeleton } from "@/components/feedback/Skeleton";
 import {
@@ -110,34 +111,20 @@ function AssetGrowthDashboardSkeleton() {
 }
 
 function AssetGrowthDashboardHeader({
-  fetchedAtLabel,
   horizon,
   onHorizonChange,
   showHorizonControls,
 }: {
-  fetchedAtLabel: string;
   horizon: DashboardHorizon;
   onHorizonChange: (horizon: DashboardHorizon) => void;
   showHorizonControls: boolean;
 }) {
+  // タイトルはナビ名「ホーム」と一致させる。キャッチコピー・検索・取得時刻はAppTopBar/ナビ側に集約（Phase 1）。
   return (
-    <header className="flex flex-col gap-4 border-b border-border pb-4 lg:flex-row lg:items-end lg:justify-between">
-      <div>
-        <p className="text-xs font-semibold text-text-secondary">長期で含み益を育てる</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-text-primary">
-          資産成長レポート
-        </h1>
-        <p className="mt-1 text-xs text-text-muted">最終取得 {fetchedAtLabel}</p>
-      </div>
-
-      <div
-        className={cn(
-          "grid w-full gap-3 lg:max-w-3xl lg:items-end",
-          showHorizonControls && "lg:grid-cols-[minmax(260px,1fr)_auto]"
-        )}
-      >
-        <GlobalStockSearch />
-        {showHorizonControls ? (
+    <PageHeader
+      title={getNavLabel("/home")}
+      actions={
+        showHorizonControls ? (
           <div
             role="group"
             aria-label="見通し期間"
@@ -160,9 +147,9 @@ function AssetGrowthDashboardHeader({
               </button>
             ))}
           </div>
-        ) : null}
-      </div>
-    </header>
+        ) : null
+      }
+    />
   );
 }
 
@@ -246,18 +233,6 @@ export function AssetGrowthDashboard() {
     () => (portfolioOutlook ? summarizeSampleProvenance(sampleOutlooks) : null),
     [portfolioOutlook, sampleOutlooks]
   );
-  const latestFetchedAt = evaluated
-    .map((position) => position.fetchedAt)
-    .filter((value): value is string => Boolean(value))
-    .sort()
-    .at(-1);
-  const fetchedAtLabel = isLoading
-    ? "読み込み中"
-    : isError
-      ? "取得失敗"
-      : latestFetchedAt
-        ? formatDateTime(latestFetchedAt)
-        : "未取得";
   const showPortfolioReport = !isLoading && !isError && evaluated.length > 0;
   const stockCount = evaluated.filter((position) => position.instrumentType === "stock").length;
   const fundCount = evaluated.filter((position) => position.instrumentType === "fund").length;
@@ -266,7 +241,6 @@ export function AssetGrowthDashboard() {
   return (
     <div className="flex flex-col gap-5">
       <AssetGrowthDashboardHeader
-        fetchedAtLabel={fetchedAtLabel}
         horizon={horizon}
         onHorizonChange={setHorizon}
         showHorizonControls={showPortfolioReport}

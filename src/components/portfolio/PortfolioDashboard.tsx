@@ -9,6 +9,9 @@ import { AssetClassBadge } from "@/components/tables/AssetClassBadge";
 import { PercentChange } from "@/components/tables/PercentChange";
 import { CurrencyValue } from "@/components/tables/CurrencyValue";
 import { EmptyState } from "@/components/feedback/EmptyState";
+import { Modal } from "@/components/ui/Modal";
+import { PageHeader } from "@/components/app-shell/PageHeader";
+import { getNavLabel } from "@/config/navigation";
 import { SymbolCombobox } from "@/components/search/SymbolCombobox";
 import { FundNameCombobox } from "@/components/search/FundNameCombobox";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
@@ -75,6 +78,7 @@ export function PortfolioDashboard() {
   const positions = useMemo(() => data ?? [], [data]);
 
   const [tab, setTab] = useState<Tab>("all");
+  const [addOpen, setAddOpen] = useState(false);
   const [isManualMode, setIsManualMode] = useState(false);
   const [symbol, setSymbol] = useState("");
   const [manualName, setManualName] = useState("");
@@ -94,6 +98,7 @@ export function PortfolioDashboard() {
       setAvgCost("");
       setNisaType(null);
       setFormError(null);
+      setAddOpen(false);
       queryClient.invalidateQueries({ queryKey: POSITIONS_KEY });
     },
     onError: (error: Error) => setFormError(error.message),
@@ -153,6 +158,20 @@ export function PortfolioDashboard() {
 
   return (
     <div className="flex flex-col gap-6">
+      <PageHeader
+        title={getNavLabel("/portfolio")}
+        description={`${filtered.length}件`}
+        actions={
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className="inline-flex min-h-11 items-center rounded-button bg-text-primary px-4 text-sm font-semibold text-white hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
+          >
+            ＋ 保有を追加
+          </button>
+        }
+      />
+
       <div
         role="tablist"
         aria-label="ポートフォリオの表示切替"
@@ -229,9 +248,8 @@ export function PortfolioDashboard() {
         </MetricCard>
       </div>
 
-      <div className="rounded-card border border-border bg-surface p-5">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-lg font-bold text-text-primary">保有銘柄を追加</p>
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="保有を追加">
+        <div className="mb-3 flex justify-end">
           <div
             role="group"
             aria-label="登録方法切替"
@@ -379,7 +397,7 @@ export function PortfolioDashboard() {
           手入力による記録です。証券口座とは連携していません（概算値）。投資信託はYahoo
           Financeにシンボルが無いため、基準価額を手入力で更新してください。
         </p>
-      </div>
+      </Modal>
 
       {isLoading ? null : filtered.length === 0 ? (
         <EmptyState

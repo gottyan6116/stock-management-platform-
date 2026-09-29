@@ -21,7 +21,10 @@ export function FavoritesDashboard() {
 
   const favoriteStocks = useMemo(() => {
     const bySymbol = new Map((quotes ?? []).map((q) => [q.providerSymbol, q]));
-    return favoriteInstruments.map((instrument) =>
+    // 候補は個別株のみ。投資信託は保有資産で管理する（お気に入りには手入力ファンドが自動登録されるため除外）。
+    return favoriteInstruments
+      .filter((instrument) => getAssetClass(instrument) !== "fund")
+      .map((instrument) =>
       buildFavoriteStock(instrument, bySymbol.get(instrument.providerSymbol), FAVORITED_AT_FALLBACK)
     );
   }, [favoriteInstruments, quotes]);
@@ -29,7 +32,6 @@ export function FavoritesDashboard() {
   // 日本株/米国株の比率には投資信託を含めない（市場がJP固定の投資信託が日本株に混入していた: Phase 0-2）。
   const jpCount = favoriteStocks.filter((s) => getAssetClass(s.instrument) === "jp_stock").length;
   const usCount = favoriteStocks.filter((s) => getAssetClass(s.instrument) === "us_stock").length;
-  const fundCount = favoriteStocks.filter((s) => getAssetClass(s.instrument) === "fund").length;
   const stockTotal = jpCount + usCount;
 
   const returns1y = favoriteStocks.map((s) => s.return1y).filter((v): v is number => v !== null);
@@ -59,7 +61,7 @@ export function FavoritesDashboard() {
     return (
       <EmptyState
         icon={Star}
-        title="まだお気に入り銘柄がありません"
+        title="まだ候補がありません"
         description="銘柄名・コード・ティッカーで検索して追加してください"
         action={
           <button
@@ -83,10 +85,10 @@ export function FavoritesDashboard() {
       ) : null}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 2xl:gap-4">
-        <MetricCard label="お気に入り銘柄">
+        <MetricCard label="候補銘柄">
           <MetricValue>{favoriteStocks.length}銘柄</MetricValue>
           <MetricDelta>
-            日本株 {jpCount} / 米国株 {usCount} / 投資信託 {fundCount}
+            日本株 {jpCount} / 米国株 {usCount}
           </MetricDelta>
         </MetricCard>
         <MetricCard
@@ -101,7 +103,7 @@ export function FavoritesDashboard() {
             {stockTotal > 0 ? Math.round((jpCount / stockTotal) * 100) : 0}% /{" "}
             {stockTotal > 0 ? Math.round((usCount / stockTotal) * 100) : 0}%
           </MetricValue>
-          <MetricDelta>株式のみ・銘柄数ベース（投資信託は含みません）</MetricDelta>
+          <MetricDelta>銘柄数ベース</MetricDelta>
         </MetricCard>
         <MetricCard label="平均配当利回り（予想）" tooltip={`取得可能な${dividendYields.length}銘柄が対象`}>
           <MetricValue>
@@ -119,7 +121,7 @@ export function FavoritesDashboard() {
       </div>
 
       <div>
-        <p className="mb-3 text-lg font-bold text-text-primary">お気に入り一覧</p>
+        <p className="mb-3 text-lg font-bold text-text-primary">候補一覧</p>
         <StockTable stocks={favoriteStocks} showAssetClassFilter defaultSort="favoritedAt" />
       </div>
     </div>

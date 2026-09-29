@@ -50,7 +50,7 @@ const config: Config = {
         modal: "8px",
       },
       boxShadow: {
-        card: "0 3px 8px rgba(45, 68, 108, 0.06)",
+        card: "none", // 装飾（影）は避ける（デザイン指針）
       },
       maxWidth: {
         content: "1600px",

@@ -1,69 +1,39 @@
-export type NavIconName =
-  | "home"
-  | "portfolio"
-  | "candidates"
-  | "compare"
-  | "analysis"
-  | "chart"
-  | "competitors"
-  | "financials"
-  | "events"
-  | "statements"
-  | "performance"
-  | "simulation"
-  | "favorites"
-  | "funds";
+export type NavIconName = "home" | "portfolio" | "candidates" | "settings";
 
-type NavItem = {
+export type NavItem = {
   href: string;
+  /** ナビ名。ページタイトル(h1)と必ず一致させる。 */
   label: string;
   icon: NavIconName;
 };
 
-type DesktopNavGroup = {
-  label: string | null;
-  items: readonly NavItem[];
-};
-
-export const DESKTOP_NAV_GROUPS: readonly DesktopNavGroup[] = [
-  {
-    label: null,
-    items: [
-      { href: "/home", label: "資産成長ホーム", icon: "home" },
-      { href: "/portfolio", label: "保有資産", icon: "portfolio" },
-      { href: "/favorites", label: "長期保有の候補", icon: "candidates" },
-      { href: "/research/compare", label: "比較・ベンチマーク", icon: "compare" },
-    ],
-  },
-  {
-    label: "銘柄を調べる",
-    items: [
-      { href: "/research/analysis", label: "銘柄分析", icon: "analysis" },
-      { href: "/research/market", label: "チャート・板・需給", icon: "chart" },
-      { href: "/research/competitors", label: "競合比較", icon: "competitors" },
-    ],
-  },
-  {
-    label: "企業情報",
-    items: [
-      { href: "/research/financials", label: "決算・財務", icon: "financials" },
-      { href: "/research/events", label: "重要発表・M&A", icon: "events" },
-      { href: "/research/statements", label: "経営者・投資家の発言", icon: "statements" },
-    ],
-  },
-  {
-    label: "検証",
-    items: [
-      { href: "/research/performance", label: "予測の成績", icon: "performance" },
-      { href: "/simulation", label: "シミュレーション", icon: "simulation" },
-    ],
-  },
-];
-
-export const MOBILE_NAV_ITEMS = [
+// サイドバーは「ホーム／保有資産／候補・検証」の3項目＋下部の「設定」（Phase 1）。
+export const MAIN_NAV_ITEMS: readonly NavItem[] = [
   { href: "/home", label: "ホーム", icon: "home" },
   { href: "/portfolio", label: "保有資産", icon: "portfolio" },
-  { href: "/favorites", label: "候補", icon: "favorites" },
-  { href: "/funds", label: "投資信託", icon: "funds" },
-  { href: "/simulation", label: "検証", icon: "simulation" },
-] as const satisfies readonly NavItem[];
+  { href: "/candidates", label: "候補・検証", icon: "candidates" },
+];
+
+export const SETTINGS_NAV_ITEM: NavItem = { href: "/settings", label: "設定", icon: "settings" };
+
+export const MOBILE_NAV_ITEMS: readonly NavItem[] = [...MAIN_NAV_ITEMS, SETTINGS_NAV_ITEM];
+
+/**
+ * ナビから外した画面の旧URL。ルート（ファイル）は残したまま、next.config.mjs で
+ * 移行先へリダイレクトする（ブックマークや内部リンクが壊れないように）。
+ */
+export const LEGACY_ROUTE_REDIRECTS: readonly { source: string; destination: string }[] = [
+  { source: "/favorites", destination: "/candidates" },
+  { source: "/funds", destination: "/portfolio" },
+  { source: "/simulation", destination: "/candidates" },
+  { source: "/japan", destination: "/candidates" },
+  { source: "/us", destination: "/candidates" },
+  { source: "/research/:section*", destination: "/candidates" },
+];
+
+/** ページタイトル(h1)はナビ名と一致させる。ページ側はこの関数でナビ設定から取得する。 */
+export function getNavLabel(href: NavItem["href"]): string {
+  const item = [...MAIN_NAV_ITEMS, SETTINGS_NAV_ITEM].find((i) => i.href === href);
+  if (!item) throw new Error(`no nav item for ${href}`);
+  return item.label;
+}

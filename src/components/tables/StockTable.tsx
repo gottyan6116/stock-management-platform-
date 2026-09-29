@@ -54,6 +54,12 @@ export function StockTable({
   const [assetClassFilter, setAssetClassFilter] = useState<AssetClass | "ALL">("ALL");
 
   // 区分は資産クラスで絞る。市場(JP/US)で絞ると、市場がJP固定の投資信託が日本株に混ざる（Phase 0-2）。
+  // 実際に存在する資産クラスだけをチップに出す（1種類しか無ければフィルタ自体を出さない）。
+  const presentClasses = useMemo(
+    () => ASSET_CLASS_ORDER.filter((c) => stocks.some((s) => getAssetClass(s.instrument) === c)),
+    [stocks]
+  );
+
   const filtered = useMemo(
     () =>
       stocks.filter((s) => assetClassFilter === "ALL" || getAssetClass(s.instrument) === assetClassFilter),
@@ -78,9 +84,9 @@ export function StockTable({
   return (
     <div className="rounded-card border border-border bg-surface">
       <div className="flex flex-col gap-3 border-b border-border p-4 md:flex-row md:items-center md:justify-between">
-        {showAssetClassFilter ? (
+        {showAssetClassFilter && presentClasses.length > 1 ? (
           <div role="group" aria-label="資産クラスフィルター" className="inline-flex gap-1 rounded-button border border-border p-0.5">
-            {(["ALL", ...ASSET_CLASS_ORDER] as const).map((c) => (
+            {(["ALL", ...presentClasses] as const).map((c) => (
               <button
                 key={c}
                 type="button"

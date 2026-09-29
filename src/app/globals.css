@@ -3,38 +3,39 @@
 @tailwind utilities;
 
 :root {
-  --background: #f5f8fd;
+  /* 白とグレーを基調に、アクセントは濃緑1色（塗りは #67C59F）。損益は色だけでなく±の符号でも区別する。 */
+  --background: #f5f5f3;
   --surface: #ffffff;
-  --surface-subtle: #f8faff;
+  --surface-subtle: #f3f3f1;
 
-  --text-primary: #26375d;
-  --text-secondary: #445674;
-  --text-muted: #8796aa;
+  --text-primary: #1c1f1d;
+  --text-secondary: #474d49;
+  --text-muted: #6f7571;
 
-  --border: #e0e7f0;
-  --border-strong: #cbd7e6;
+  --border: #e4e5e1;
+  --border-strong: #cdd0ca;
 
-  --primary: #4d7cff;
-  --primary-hover: #3d69e8;
-  --primary-soft: #eef3ff;
+  --primary: #1f6b52;
+  --primary-hover: #185540;
+  --primary-soft: #e7f2ec;
 
-  --success: #5db852;
-  --success-soft: #dffbd8;
-  --success-text: color-mix(in srgb, var(--success) 50%, var(--text-primary));
+  --success: #1f6b52;
+  --success-soft: #e7f2ec;
+  --success-text: #1f6b52;
 
-  --danger: #ef5c49;
-  --danger-soft: #ffe6e1;
-  --danger-text: color-mix(in srgb, var(--danger) 50%, var(--text-primary));
+  --danger: #c0432b;
+  --danger-soft: #fbebe7;
+  --danger-text: #a8371f;
 
-  --warning: #ff813e;
-  --warning-soft: #fff0e7;
-  --warning-text: color-mix(in srgb, var(--warning) 50%, var(--text-primary));
+  --warning: #b86e00;
+  --warning-soft: #fff3df;
+  --warning-text: #8f5600;
 
-  --focus: #315ee8;
+  --focus: #135c44;
 
-  --series-mint: #58c3a2;
-  --series-cyan: #45b3d8;
-  --series-yellow: #f5b936;
+  --series-mint: #67c59f;
+  --series-cyan: #67c59f;
+  --series-yellow: #d9b44a;
 }
 
 @layer base {

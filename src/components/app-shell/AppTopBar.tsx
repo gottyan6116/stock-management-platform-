@@ -1,12 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Clock3, Settings } from "lucide-react";
+import { GlobalStockSearch } from "@/components/search/GlobalStockSearch";
 import { fetchPositions, POSITIONS_KEY } from "@/features/portfolio/api";
 import { formatDateTime, formatDateTimeCompact } from "@/lib/utils/format";
 
+/**
+ * 全画面共通のヘッダー。銘柄検索（ショートカット「/」）はここに1つだけ置く。
+ * 更新時刻は右端に1行だけ表示し、各ページ側には出さない（Phase 1）。
+ */
 export function AppTopBar() {
   const {
     data = [],
@@ -26,10 +29,10 @@ export function AppTopBar() {
     [data]
   );
   const freshness = isLoading
-    ? "最終取得 確認中"
+    ? "価格更新 確認中"
     : isError
-      ? "最終取得 確認できません"
-      : `最終取得 ${latestFetchedAt ? formatDateTime(latestFetchedAt) : "未取得"}`;
+      ? "価格更新 確認できません"
+      : `価格更新 ${latestFetchedAt ? formatDateTime(latestFetchedAt) : "未取得"}`;
   const compactFreshness = isLoading
     ? "確認中"
     : isError
@@ -40,36 +43,23 @@ export function AppTopBar() {
 
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-surface">
-      <div className="mx-auto flex min-h-14 w-full max-w-content items-center justify-between gap-3 px-4 md:px-6 xl:px-8">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-text-primary">長期投資インテリジェンス</p>
-          <p className="truncate text-xs text-text-secondary">判断材料を一か所で確認</p>
+      <div className="mx-auto flex min-h-14 w-full max-w-content items-center justify-between gap-4 px-4 md:px-6 xl:px-8">
+        <div className="min-w-0 flex-1">
+          <GlobalStockSearch />
         </div>
-
-        <div className="flex shrink-0 items-center gap-1 text-xs text-text-secondary sm:gap-2">
-          <span
-            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap sm:gap-2"
-            role="status"
-            aria-live="polite"
-            aria-label={freshness}
-          >
-            <Clock3 className="h-3.5 w-3.5 text-text-muted sm:h-4 sm:w-4" aria-hidden />
-            <span className="sm:hidden" aria-hidden>
-              {compactFreshness}
-            </span>
-            <span className="hidden sm:inline" aria-hidden>
-              {freshness}
-            </span>
+        <span
+          className="shrink-0 whitespace-nowrap text-xs text-text-muted"
+          role="status"
+          aria-live="polite"
+          aria-label={freshness}
+        >
+          <span className="sm:hidden" aria-hidden>
+            {compactFreshness}
           </span>
-          <Link
-            href="/settings"
-            aria-label="設定を開く"
-            className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 whitespace-nowrap rounded-button px-2 font-semibold text-text-secondary transition-colors hover:bg-primary-soft hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus active:bg-primary-soft sm:px-3"
-          >
-            <Settings className="h-[17px] w-[17px]" aria-hidden />
-            <span className="hidden sm:inline">設定</span>
-          </Link>
-        </div>
+          <span className="hidden sm:inline" aria-hidden>
+            {freshness}
+          </span>
+        </span>
       </div>
     </header>
   );

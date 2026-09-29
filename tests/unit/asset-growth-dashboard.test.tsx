@@ -72,7 +72,8 @@ describe("AssetGrowthDashboard", () => {
     expect(screen.getByText("根拠の充実度（サンプル）")).toBeInTheDocument();
     expect(screen.getByText("ポートフォリオのプラス可能性（サンプル）")).toBeInTheDocument();
     expect(screen.getByText("下落リスク（サンプル）")).toBeInTheDocument();
-    expect(screen.getByRole("combobox")).toBeInTheDocument();
+    // 銘柄検索はヘッダー(AppTopBar)に1つだけ。ホーム内には置かない（Phase 1）。
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     expect(
       screen.getAllByText(/サンプル · 表示確認用の固定サンプル · sample-v1 · 更新 /).length
     ).toBeGreaterThan(0);
@@ -168,12 +169,14 @@ describe("AssetGrowthDashboard", () => {
     expect(within(composition).queryByText(/日本株|米国株/)).not.toBeInTheDocument();
   });
 
-  it("keeps stock search and the position-management action available for an empty portfolio", async () => {
+  it("keeps the position-management action available for an empty portfolio, with no page-level search", async () => {
     mockPositions([]);
 
     renderDashboard();
 
-    expect(await screen.findByRole("combobox", { name: "銘柄検索" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "保有資産を登録する" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "銘柄検索" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "ホーム" })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "見通し期間" })).not.toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "保有資産を登録する" })).toHaveAttribute(
       "href",
@@ -202,7 +205,7 @@ describe("AppTopBar", () => {
     );
 
     expect(
-      await screen.findByRole("status", { name: "最終取得 2026-08-16 10:30 JST" })
+      await screen.findByRole("status", { name: "価格更新 2026-08-16 10:30 JST" })
     ).toBeInTheDocument();
     expect(screen.getByText("08/16 10:30 JST")).toHaveClass("sm:hidden");
   });
@@ -217,6 +220,28 @@ describe("AppTopBar", () => {
       </QueryClientProvider>
     );
 
-    expect(await screen.findByText("最終取得 未取得")).toBeInTheDocument();
+    expect(await screen.findByText("価格更新 未取得")).toBeInTheDocument();
+  });
+});
+
+describe("AppTopBar layout (Phase 1)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("holds the single global search and no duplicated tagline or settings shortcut", async () => {
+    mockPositions([]);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={client}>
+        <AppTopBar />
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findAllByRole("combobox", { name: "銘柄検索" })).toHaveLength(1);
+    expect(screen.queryByText("長期投資インテリジェンス")).not.toBeInTheDocument();
+    expect(screen.queryByText("判断材料を一か所で確認")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "設定を開く" })).not.toBeInTheDocument();
   });
 });

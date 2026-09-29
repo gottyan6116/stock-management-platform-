@@ -94,4 +94,54 @@ describe("PortfolioDashboard position actions", () => {
     expect(await screen.findByText("評価額（一部未計算）")).toBeInTheDocument();
     expect(screen.getByText("評価損益（概算・一部未計算）")).toBeInTheDocument();
   });
+
+  it("keeps the add-position form off the page until the button opens it in a dialog (Phase 1)", async () => {
+    mockPositionRequests([position]);
+    renderDashboard();
+
+    await screen.findAllByRole("link", { name: /トヨタ自動車/ });
+    expect(screen.getByRole("heading", { level: 1, name: "保有資産" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("保有数量")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /保有を追加/ }));
+    const dialog = await screen.findByRole("dialog", { name: "保有を追加" });
+    expect(dialog).toBeInTheDocument();
+    expect(screen.getByLabelText("保有数量")).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("filters by asset class so funds (stored with market=JP) never appear under 日本株 (regression 0-2)", async () => {
+    const fund = {
+      ...position,
+      id: "f1",
+      providerSymbol: "MANUAL:fund",
+      displaySymbol: "fund",
+      name: "テストファンド",
+      market: "JP",
+      instrumentType: "fund",
+      assetClass: "fund",
+      isManual: true,
+      displayPrice: 38532,
+      unitDivisor: 10000,
+      lastClose: 3.8532,
+      quantity: 267218,
+    };
+    mockPositionRequests([position, fund]);
+    renderDashboard();
+    await screen.findAllByRole("link", { name: /トヨタ自動車/ });
+
+    fireEvent.click(screen.getByRole("tab", { name: "日本株" }));
+    expect(screen.getAllByRole("link", { name: /トヨタ自動車/ }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: /テストファンド/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "投資信託" }));
+    expect(screen.getAllByRole("link", { name: /テストファンド/ }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: /トヨタ自動車/ })).not.toBeInTheDocument();
+    // 基準価額は1万口あたり、評価額は口数×基準価額÷10,000
+    expect(screen.getAllByText("¥38,532").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("¥1,029,644").length).toBeGreaterThan(0);
+  });
 });
