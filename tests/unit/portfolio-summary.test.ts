@@ -19,8 +19,11 @@ const base: PositionApiItem = {
   market: "JP",
   currency: "JPY",
   instrumentType: "stock",
+  assetClass: "jp_stock",
   priceDate: "2026-08-15",
   fetchedAt: "2026-08-16T00:00:00Z",
+  displayPrice: 120,
+  unitDivisor: 1,
   lastClose: 120,
   change: 2,
   changePercent: 1.7,
@@ -39,7 +42,7 @@ describe("portfolio summary", () => {
   it("keeps currencies separate and reports mixed signs", () => {
     const rows = evaluatePositions([
       base,
-      { ...base, id: "p2", currency: "USD", market: "US", avgCost: 200, lastClose: 180 },
+      { ...base, id: "p2", currency: "USD", market: "US", assetClass: "us_stock", avgCost: 200, displayPrice: 180, lastClose: 180 },
     ]);
     expect(summarizeByCurrency(rows)).toHaveLength(2);
     expect(getPortfolioProfitState(summarizeByCurrency(rows))).toBe("mixed");
@@ -52,7 +55,7 @@ describe("portfolio summary", () => {
 
   it("tracks partial valuation coverage within one currency", () => {
     const summaries = summarizeByCurrency(
-      evaluatePositions([base, { ...base, id: "p2", lastClose: null }])
+      evaluatePositions([base, { ...base, id: "p2", displayPrice: null, lastClose: null }])
     );
 
     expect(summaries[0]).toMatchObject({
@@ -90,6 +93,7 @@ describe("portfolio summary", () => {
           currency: "USD",
           market: "US",
           avgCost: 100,
+          displayPrice: null,
           lastClose: null,
         },
       ])

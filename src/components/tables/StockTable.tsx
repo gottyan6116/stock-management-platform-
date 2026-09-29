@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowUpDown } from "lucide-react";
-import type { FavoriteStock, Market } from "@/types/domain";
+import type { FavoriteStock } from "@/types/domain";
+import { ASSET_CLASS_LABEL, ASSET_CLASS_ORDER, getAssetClass, type AssetClass } from "@/lib/domain/asset-class";
 import { CurrencyValue } from "./CurrencyValue";
 import { PercentChange } from "./PercentChange";
-import { MarketBadge } from "./MarketBadge";
+import { AssetClassBadge } from "./AssetClassBadge";
 import { Sparkline } from "./Sparkline";
 import { FavoriteToggle } from "@/components/search/FavoriteToggle";
 import { StockMobileCard } from "./StockMobileCard";
@@ -40,21 +41,23 @@ function sortValue(stock: FavoriteStock, key: SortKey): number | string {
 
 export function StockTable({
   stocks,
-  showMarketFilter = false,
+  showAssetClassFilter = false,
   defaultSort = "changePercent",
 }: {
   stocks: FavoriteStock[];
-  showMarketFilter?: boolean;
+  showAssetClassFilter?: boolean;
   defaultSort?: SortKey;
 }) {
   const router = useRouter();
   const [sortKey, setSortKey] = useState<SortKey>(defaultSort);
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
-  const [marketFilter, setMarketFilter] = useState<Market | "ALL">("ALL");
+  const [assetClassFilter, setAssetClassFilter] = useState<AssetClass | "ALL">("ALL");
 
+  // 区分は資産クラスで絞る。市場(JP/US)で絞ると、市場がJP固定の投資信託が日本株に混ざる（Phase 0-2）。
   const filtered = useMemo(
-    () => stocks.filter((s) => marketFilter === "ALL" || s.instrument.market === marketFilter),
-    [stocks, marketFilter]
+    () =>
+      stocks.filter((s) => assetClassFilter === "ALL" || getAssetClass(s.instrument) === assetClassFilter),
+    [stocks, assetClassFilter]
   );
 
   const sorted = useMemo(() => {
@@ -75,19 +78,19 @@ export function StockTable({
   return (
     <div className="rounded-card border border-border bg-surface">
       <div className="flex flex-col gap-3 border-b border-border p-4 md:flex-row md:items-center md:justify-between">
-        {showMarketFilter ? (
-          <div role="group" aria-label="市場フィルター" className="inline-flex gap-1 rounded-button border border-border p-0.5">
-            {(["ALL", "JP", "US"] as const).map((m) => (
+        {showAssetClassFilter ? (
+          <div role="group" aria-label="資産クラスフィルター" className="inline-flex gap-1 rounded-button border border-border p-0.5">
+            {(["ALL", ...ASSET_CLASS_ORDER] as const).map((c) => (
               <button
-                key={m}
+                key={c}
                 type="button"
-                aria-pressed={marketFilter === m}
-                onClick={() => setMarketFilter(m)}
-                className={`rounded-sm px-3 py-1 text-xs font-semibold ${
-                  marketFilter === m ? "bg-primary-soft text-primary" : "text-text-secondary"
+                aria-pressed={assetClassFilter === c}
+                onClick={() => setAssetClassFilter(c)}
+                className={`min-h-9 rounded-sm px-3 py-1 text-xs font-semibold ${
+                  assetClassFilter === c ? "bg-primary-soft text-primary" : "text-text-secondary"
                 }`}
               >
-                {m === "ALL" ? "すべて" : m === "JP" ? "日本株" : "米国株"}
+                {c === "ALL" ? "すべて" : ASSET_CLASS_LABEL[c]}
               </button>
             ))}
           </div>
@@ -129,10 +132,10 @@ export function StockTable({
               銘柄
             </th>
             <th scope="col" className="px-4 py-3">
-              市場
+              資産クラス
             </th>
             <th scope="col" className="px-4 py-3">
-              最新終値
+              株価 / 基準価額
             </th>
             <th scope="col" className="px-4 py-3">
               前営業日比
@@ -166,16 +169,19 @@ export function StockTable({
                   <div className="min-w-0">
                     <p className="truncate font-semibold text-text-primary">{stock.instrument.name}</p>
                     <p className="truncate text-xs text-text-muted">
-                      {stock.instrument.displaySymbol} · {stock.instrument.exchange}
+                      {stock.instrument.instrumentType === "fund" ? "投資信託" : `${stock.instrument.displaySymbol} · ${stock.instrument.exchange ?? "—"}`}
                     </p>
                   </div>
                 </div>
               </td>
               <td className="px-4 py-3">
-                <MarketBadge market={stock.instrument.market} />
+                <AssetClassBadge assetClass={getAssetClass(stock.instrument)} />
               </td>
               <td className="px-4 py-3">
-                <CurrencyValue value={stock.quote.close} currency={stock.instrument.currency} />
+                <CurrencyValue value={stock.quote.close} currency={stock.instrument.currency} kind="price" />
+                {stock.instrument.instrumentType === "fund" ? (
+                  <span className="block text-[11px] text-text-muted">1万口あたり</span>
+                ) : null}
               </td>
               <td className="px-4 py-3">
                 <PercentChange amount={stock.quote.change} percent={stock.quote.changePercent} />

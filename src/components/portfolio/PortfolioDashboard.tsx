@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Briefcase, Trash2 } from "lucide-react";
 import { MetricCard, MetricValue } from "@/components/ui/MetricCard";
-import { MarketBadge } from "@/components/tables/MarketBadge";
+import { AssetClassBadge } from "@/components/tables/AssetClassBadge";
 import { PercentChange } from "@/components/tables/PercentChange";
 import { CurrencyValue } from "@/components/tables/CurrencyValue";
 import { EmptyState } from "@/components/feedback/EmptyState";
@@ -16,15 +16,19 @@ import { cn } from "@/lib/utils/cn";
 import { fetchPositions, POSITIONS_KEY } from "@/features/portfolio/api";
 import { evaluatePositions, summarizeByCurrency } from "@/features/portfolio/summary";
 import type { NisaType } from "@/features/portfolio/types";
+import { ASSET_CLASS_LABEL, type AssetClass } from "@/lib/domain/asset-class";
 
-type Tab = "all" | "tsumitate" | "growth" | "US" | "JP";
+type Tab = "all" | "tsumitate" | "growth" | AssetClass;
 
+// 区分は資産クラス（投資信託／日本株／米国株）で切り替える。市場(JP/US)で切ると、
+// 市場がJP固定で保存されている投資信託が「日本株」に混ざってしまう（Phase 0-2）。
 const TABS: { value: Tab; label: string }[] = [
   { value: "all", label: "すべて" },
   { value: "tsumitate", label: "積立NISA" },
   { value: "growth", label: "成長投資枠" },
-  { value: "US", label: "米国株" },
-  { value: "JP", label: "日本株" },
+  { value: "fund", label: ASSET_CLASS_LABEL.fund },
+  { value: "jp_stock", label: ASSET_CLASS_LABEL.jp_stock },
+  { value: "us_stock", label: ASSET_CLASS_LABEL.us_stock },
 ];
 
 const NISA_LABEL: Record<Exclude<NisaType, null>, string> = {
@@ -138,7 +142,7 @@ export function PortfolioDashboard() {
   const filtered = useMemo(() => {
     if (tab === "all") return evaluated;
     if (tab === "tsumitate" || tab === "growth") return evaluated.filter((p) => p.nisaType === tab);
-    return evaluated.filter((p) => p.market === tab);
+    return evaluated.filter((p) => p.assetClass === tab);
   }, [evaluated, tab]);
 
   const currencySummaries = useMemo(() => summarizeByCurrency(filtered), [filtered]);
@@ -393,13 +397,13 @@ export function PortfolioDashboard() {
                     銘柄
                   </th>
                   <th scope="col" className="px-4 py-3">
-                    市場 / 区分
+                    資産クラス / 口座
                   </th>
                   <th scope="col" className="px-4 py-3">
                     保有数量
                   </th>
                   <th scope="col" className="px-4 py-3">
-                    最新終値/基準価額
+                    株価 / 基準価額
                   </th>
                   <th scope="col" className="px-4 py-3">
                     前営業日比
@@ -435,7 +439,7 @@ export function PortfolioDashboard() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1">
-                        <MarketBadge market={p.market} />
+                        <AssetClassBadge assetClass={p.assetClass} />
                         {p.nisaType ? (
                           <span className="text-[11px] font-semibold text-primary">
                             {NISA_LABEL[p.nisaType]}
@@ -448,7 +452,10 @@ export function PortfolioDashboard() {
                       {p.instrumentType === "fund" ? "口" : "株"}
                     </td>
                     <td className="px-4 py-3">
-                      <CurrencyValue value={p.lastClose} currency={p.currency} />
+                      <CurrencyValue value={p.displayPrice} currency={p.currency} kind="price" />
+                      {p.assetClass === "fund" ? (
+                        <span className="block text-[11px] text-text-muted">1万口あたり</span>
+                      ) : null}
                     </td>
                     <td className="px-4 py-3">
                       <PercentChange amount={p.change} percent={p.changePercent} />
@@ -460,7 +467,7 @@ export function PortfolioDashboard() {
                       {p.unrealizedPnl === null ? (
                         <span className="text-text-muted">—</span>
                       ) : (
-                        <PercentChange amount={p.unrealizedPnl} percent={p.unrealizedPnlPercent} />
+                        <PercentChange amount={p.unrealizedPnl} percent={p.unrealizedPnlPercent} kind="amount" currency={p.currency} />
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -512,7 +519,7 @@ export function PortfolioDashboard() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <MarketBadge market={p.market} />
+                  <AssetClassBadge assetClass={p.assetClass} />
                   {p.nisaType ? (
                     <span className="text-[11px] font-semibold text-primary">
                       {NISA_LABEL[p.nisaType]}
@@ -526,8 +533,10 @@ export function PortfolioDashboard() {
 
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
-                    <p className="text-[11px] text-text-muted">最新終値/基準価額</p>
-                    <CurrencyValue value={p.lastClose} currency={p.currency} />
+                    <p className="text-[11px] text-text-muted">
+                      {p.assetClass === "fund" ? "基準価額（1万口あたり）" : "株価"}
+                    </p>
+                    <CurrencyValue value={p.displayPrice} currency={p.currency} kind="price" />
                   </div>
                   <div>
                     <p className="text-[11px] text-text-muted">前営業日比</p>
@@ -542,7 +551,7 @@ export function PortfolioDashboard() {
                     {p.unrealizedPnl === null ? (
                       <span className="text-text-muted">—</span>
                     ) : (
-                      <PercentChange amount={p.unrealizedPnl} percent={p.unrealizedPnlPercent} />
+                      <PercentChange amount={p.unrealizedPnl} percent={p.unrealizedPnlPercent} kind="amount" currency={p.currency} />
                     )}
                   </div>
                 </div>

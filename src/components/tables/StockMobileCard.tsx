@@ -1,7 +1,8 @@
 import type { FavoriteStock } from "@/types/domain";
 import { CurrencyValue } from "./CurrencyValue";
 import { PercentChange } from "./PercentChange";
-import { MarketBadge } from "./MarketBadge";
+import { AssetClassBadge } from "./AssetClassBadge";
+import { getAssetClass } from "@/lib/domain/asset-class";
 import { Sparkline } from "./Sparkline";
 import { FavoriteToggle } from "@/components/search/FavoriteToggle";
 import { formatPercent } from "@/lib/utils/format";
@@ -32,7 +33,7 @@ export function StockMobileCard({
           <p className="truncate text-xs text-text-muted">{stock.instrument.displaySymbol}</p>
         </div>
         <div className="flex items-center gap-2">
-          <MarketBadge market={stock.instrument.market} />
+          <AssetClassBadge assetClass={getAssetClass(stock.instrument)} />
           <div onClick={(e) => e.stopPropagation()}>
             <FavoriteToggle instrument={stock.instrument} />
           </div>
@@ -40,7 +41,10 @@ export function StockMobileCard({
       </div>
       <div className="flex items-center justify-between gap-3">
         <div>
-          <CurrencyValue value={stock.quote.close} currency={stock.instrument.currency} />
+          <CurrencyValue value={stock.quote.close} currency={stock.instrument.currency} kind="price" />
+          {stock.instrument.instrumentType === "fund" ? (
+            <span className="ml-1 text-[11px] text-text-muted">1万口あたり</span>
+          ) : null}
           <div className="mt-1">
             <PercentChange amount={stock.quote.change} percent={stock.quote.changePercent} />
           </div>

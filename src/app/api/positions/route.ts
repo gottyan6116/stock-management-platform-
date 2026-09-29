@@ -3,7 +3,12 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { listPositions, upsertPosition } from "@/server/repositories/positions-repository";
 import { addFavorite } from "@/server/repositories/favorites-repository";
-import { upsertManualFundPrice } from "@/server/repositories/manual-fund-prices-repository";
+import {
+  listLatestManualFundPrices,
+  upsertManualFundPrice,
+} from "@/server/repositories/manual-fund-prices-repository";
+import { FUND_UNIT_DIVISOR, getAssetClass } from "@/lib/domain/asset-class";
+import { fundPrice, stockPrice } from "@/lib/pricing/instrument-price";
 import {
   resolveOrCreateInstrument,
   resolveOrCreateManualFundInstrument,
@@ -11,9 +16,6 @@ import {
 import { getMarketDataProvider } from "@/lib/market-data/get-provider";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { apiError } from "@/lib/errors/api-error";
-
-// 投資信託(口数ベース)の基準価額は「10,000口あたり」の慣行で表示される。
-const FUND_UNIT_DIVISOR = 10000;
 
 export async function GET() {
   const supabase = createClient();
@@ -28,38 +30,16 @@ export async function GET() {
 
     const data = await Promise.all(
       positions.map(async (position) => {
+        const assetClass = getAssetClass({
+          instrumentType: position.instrument.instrument_type,
+          market: position.instrument.market,
+        });
         const isFundUnitBased = position.isManual && position.instrument.instrument_type === "fund";
 
-        if (isFundUnitBased) {
-          const lastClose = position.manualUnitPrice !== null ? position.manualUnitPrice / FUND_UNIT_DIVISOR : null;
-          return {
-            id: position.id,
-            quantity: position.quantity,
-            avgCost: position.avgCost !== null ? position.avgCost / FUND_UNIT_DIVISOR : null,
-            nisaType: position.nisaType,
-            isManual: true,
-            providerSymbol: position.instrument.provider_symbol,
-            displaySymbol: position.instrument.display_symbol,
-            name: position.instrument.name,
-            exchange: position.instrument.exchange,
-            market: position.instrument.market,
-            currency: position.instrument.currency,
-            instrumentType: position.instrument.instrument_type,
-            priceDate: position.manualPriceDate,
-            fetchedAt: position.manualPriceDate,
-            lastClose,
-            change: null,
-            changePercent: null,
-          };
-        }
-
-        const quote = await provider.getQuote(position.instrument.provider_symbol).catch(() => null);
-        return {
+        const common = {
           id: position.id,
           quantity: position.quantity,
-          avgCost: position.avgCost,
           nisaType: position.nisaType,
-          isManual: position.isManual,
           providerSymbol: position.instrument.provider_symbol,
           displaySymbol: position.instrument.display_symbol,
           name: position.instrument.name,
@@ -67,9 +47,41 @@ export async function GET() {
           market: position.instrument.market,
           currency: position.instrument.currency,
           instrumentType: position.instrument.instrument_type,
-          priceDate: quote?.priceDate ?? null,
+          assetClass,
+        };
+
+        if (isFundUnitBased) {
+          // 基準価額は保有ロットの値と履歴テーブルのうち新しい方（画面間で1銘柄1価格にする）。
+          const history = await listLatestManualFundPrices(supabase, position.instrument.id, 1).catch(() => []);
+          const price = fundPrice(
+            { manualUnitPrice: position.manualUnitPrice, manualPriceDate: position.manualPriceDate },
+            history[0] ? { unitPrice: history[0].unit_price, priceDate: history[0].price_date } : null
+          );
+          return {
+            ...common,
+            avgCost: position.avgCost !== null ? position.avgCost / FUND_UNIT_DIVISOR : null,
+            isManual: true,
+            priceDate: price.priceDate,
+            fetchedAt: price.priceDate,
+            displayPrice: price.displayPrice,
+            unitDivisor: price.unitDivisor,
+            lastClose: price.displayPrice !== null ? price.displayPrice / price.unitDivisor : null,
+            change: null,
+            changePercent: null,
+          };
+        }
+
+        const quote = await provider.getQuote(position.instrument.provider_symbol).catch(() => null);
+        const price = stockPrice(quote?.close ?? null, quote?.priceDate ?? null);
+        return {
+          ...common,
+          avgCost: position.avgCost,
+          isManual: position.isManual,
+          priceDate: price.priceDate,
           fetchedAt: quote?.fetchedAt ?? null,
-          lastClose: quote?.close ?? null,
+          displayPrice: price.displayPrice,
+          unitDivisor: price.unitDivisor,
+          lastClose: price.displayPrice,
           change: quote?.change ?? null,
           changePercent: quote?.changePercent ?? null,
         };

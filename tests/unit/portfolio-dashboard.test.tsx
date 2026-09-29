@@ -22,8 +22,11 @@ const position = {
   market: "JP",
   currency: "JPY",
   instrumentType: "stock",
+  assetClass: "jp_stock",
   priceDate: "2026-08-15",
   fetchedAt: "2026-08-16T00:00:00Z",
+  displayPrice: 120,
+  unitDivisor: 1,
   lastClose: 120,
   change: 2,
   changePercent: 1.7,
@@ -85,7 +88,7 @@ describe("PortfolioDashboard position actions", () => {
   });
 
   it("labels portfolio-page totals when valuation and profit coverage are partial", async () => {
-    mockPositionRequests([position, { ...position, id: "p2", lastClose: null }]);
+    mockPositionRequests([position, { ...position, id: "p2", displayPrice: null, lastClose: null }]);
     renderDashboard();
 
     expect(await screen.findByText("評価額（一部未計算）")).toBeInTheDocument();

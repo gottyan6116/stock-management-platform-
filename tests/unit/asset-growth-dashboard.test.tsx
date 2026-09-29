@@ -21,8 +21,11 @@ const profitablePosition = {
   market: "JP",
   currency: "JPY",
   instrumentType: "stock",
+  assetClass: "jp_stock",
   priceDate: "2026-08-15",
   fetchedAt: "2026-08-16T00:00:00Z",
+  displayPrice: 120,
+  unitDivisor: 1,
   lastClose: 120,
   change: 2,
   changePercent: 1.7,
@@ -63,7 +66,7 @@ describe("AssetGrowthDashboard", () => {
       await screen.findByRole("heading", { name: "資産全体の現在地" }, { timeout: 3000 })
     ).toBeInTheDocument();
     expect(screen.getByText("資産全体はプラス")).toBeInTheDocument();
-    expect(screen.getByText("+¥200.0")).toBeInTheDocument();
+    expect(screen.getByText("+¥200")).toBeInTheDocument();
     expect(screen.getAllByText("サンプル").length).toBeGreaterThan(0);
     expect(screen.getByText("見直し候補（サンプル）")).toBeInTheDocument();
     expect(screen.getByText("根拠の充実度（サンプル）")).toBeInTheDocument();
@@ -79,7 +82,7 @@ describe("AssetGrowthDashboard", () => {
     expect(portfolioStatus).not.toBeNull();
     expect(
       within(portfolioStatus as HTMLElement).getByText(
-        /サンプル · 表示確認用の固定サンプル · sample-v1 · 更新 2026-08-16 09:00/
+        /サンプル · 表示確認用の固定サンプル · sample-v1 · 更新 2026-08-16 09:00 JST/
       )
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "予測に使った情報" })).toBeInTheDocument();
@@ -111,6 +114,7 @@ describe("AssetGrowthDashboard", () => {
         displaySymbol: "AAPL",
         market: "US",
         currency: "USD",
+        displayPrice: null,
         lastClose: null,
       },
     ]);
@@ -198,9 +202,9 @@ describe("AppTopBar", () => {
     );
 
     expect(
-      await screen.findByRole("status", { name: "最終取得 2026-08-16 10:30" })
+      await screen.findByRole("status", { name: "最終取得 2026-08-16 10:30 JST" })
     ).toBeInTheDocument();
-    expect(screen.getByText("08/16 10:30")).toHaveClass("sm:hidden");
+    expect(screen.getByText("08/16 10:30 JST")).toHaveClass("sm:hidden");
   });
 
   it("shows an unfetched state when the positions response has no timestamps", async () => {

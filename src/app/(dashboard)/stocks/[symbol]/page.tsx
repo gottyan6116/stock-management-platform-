@@ -6,6 +6,8 @@ import { normalizeProviderSymbol } from "@/lib/market-data/normalize";
 import { createClient } from "@/lib/supabase/server";
 import { findInstrumentByProviderSymbol } from "@/server/repositories/instruments-repository";
 import { listManualFundPrices } from "@/server/repositories/manual-fund-prices-repository";
+import { listPositions } from "@/server/repositories/positions-repository";
+import { fundPrice } from "@/lib/pricing/instrument-price";
 import { ManualFundPriceHistoryForm } from "@/components/funds/ManualFundPriceHistoryForm";
 import type { DailyPrice, Instrument } from "@/types/domain";
 import { MetricCard, MetricValue } from "@/components/ui/MetricCard";
@@ -82,6 +84,21 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
     }));
 
     const latest = priceHistory.at(-1) ?? null;
+    // 保有画面と同じ規則（保有ロットの基準価額と履歴のうち新しい方）で「現在の基準価額」を決め、
+    // 画面間で同じファンドの価格が食い違わないようにする（Phase 0-1 / 0-3）。
+    const {
+      data: { user: currentUser },
+    } = await supabase.auth.getUser();
+    const ownLots = currentUser
+      ? (await listPositions(supabase, currentUser.id).catch(() => [])).filter(
+          (p) => p.instrument.id === manualInstrument.id && p.manualUnitPrice !== null
+        )
+      : [];
+    const newestLot = [...ownLots].sort((a, b) => (b.manualPriceDate ?? "").localeCompare(a.manualPriceDate ?? ""))[0];
+    const currentNav = fundPrice(
+      { manualUnitPrice: newestLot?.manualUnitPrice ?? null, manualPriceDate: newestLot?.manualPriceDate ?? null },
+      latest ? { unitPrice: latest.unit_price, priceDate: latest.price_date } : null
+    );
     const previous = priceHistory.length > 1 ? priceHistory[priceHistory.length - 2]! : null;
     const change = latest && previous ? latest.unit_price - previous.unit_price : null;
     const changePercent =
@@ -122,7 +139,7 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
             <FavoriteToggle instrument={instrument} />
           </div>
           <p className="text-xs text-text-muted">
-            基準価額 更新日 {formatDate(latest?.price_date ?? null)}
+            基準価額 更新日 {formatDate(currentNav.priceDate)}
           </p>
         </div>
 
@@ -136,8 +153,9 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
                   <MetricCard label="最新基準価額（1万口あたり）">
                     <MetricValue>
                       <CurrencyValue
-                        value={latest?.unit_price ?? null}
+                        value={currentNav.displayPrice}
                         currency={instrument.currency}
+                        kind="price"
                       />
                     </MetricValue>
                   </MetricCard>
@@ -269,7 +287,7 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
         <Link
-          href={instrument.market === "JP" ? "/japan" : "/us"}
+          href="/favorites"
           className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-text-secondary hover:text-primary"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
@@ -299,7 +317,7 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
                 <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                   <MetricCard label="最新終値">
                     <MetricValue>
-                      <CurrencyValue value={quote?.close ?? null} currency={instrument.currency} />
+                      <CurrencyValue value={quote?.close ?? null} currency={instrument.currency} kind="price" />
                     </MetricValue>
                   </MetricCard>
                   <MetricCard label="前営業日比">

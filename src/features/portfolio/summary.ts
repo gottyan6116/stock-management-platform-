@@ -8,7 +8,11 @@ import type {
 
 export function evaluatePositions(positions: PositionApiItem[]): EvaluatedPosition[] {
   return positions.map((position) => {
-    const marketValue = position.lastClose === null ? null : position.lastClose * position.quantity;
+    // 口数×基準価額÷10,000。1口あたりへ割ってから掛けると浮動小数の誤差が出るため、割り算は最後。
+    const marketValue =
+      position.displayPrice === null
+        ? null
+        : (position.quantity * position.displayPrice) / position.unitDivisor;
     const costBasis = position.avgCost === null ? null : position.avgCost * position.quantity;
     const unrealizedPnl =
       marketValue === null || costBasis === null ? null : marketValue - costBasis;

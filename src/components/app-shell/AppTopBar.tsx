@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Clock3, Settings } from "lucide-react";
 import { fetchPositions, POSITIONS_KEY } from "@/features/portfolio/api";
-import { formatDateTime } from "@/lib/utils/format";
+import { formatDateTime, formatDateTimeCompact } from "@/lib/utils/format";
 
 export function AppTopBar() {
   const {
@@ -35,7 +35,7 @@ export function AppTopBar() {
     : isError
       ? "確認不可"
       : latestFetchedAt
-        ? formatDateTime(latestFetchedAt).slice(5).replace("-", "/")
+        ? `${formatDateTimeCompact(latestFetchedAt)} JST`
         : "未取得";
 
   return (

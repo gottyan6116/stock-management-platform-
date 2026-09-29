@@ -3,11 +3,11 @@
 import { useMemo } from "react";
 import { Star } from "lucide-react";
 import { useFavorites } from "@/features/favorites/FavoritesProvider";
-import { buildMockFavoriteStock, buildMockDailySeriesFor } from "@/lib/mock/favorite-stocks";
-import { computeFavoriteBasketIndex } from "@/lib/aggregation/basket-index";
+import { useFavoriteQuotes } from "@/features/favorites/quotes";
+import { buildFavoriteStock } from "@/features/favorites/build-favorite-stock";
+import { getAssetClass } from "@/lib/domain/asset-class";
 import { MetricCard, MetricDelta, MetricValue } from "@/components/ui/MetricCard";
 import { MarketRatioDonut } from "@/components/charts/MarketRatioDonut";
-import { BasketIndexChart } from "@/components/charts/BasketIndexChart";
 import { StockTable } from "@/components/tables/StockTable";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { CardSkeleton, TableSkeleton } from "@/components/feedback/Skeleton";
@@ -17,14 +17,20 @@ const FAVORITED_AT_FALLBACK = new Date().toISOString();
 
 export function FavoritesDashboard() {
   const { favoriteInstruments, isLoading } = useFavorites();
+  const { data: quotes, isLoading: quotesLoading, isError: quotesError } = useFavoriteQuotes();
 
-  const favoriteStocks = useMemo(
-    () => favoriteInstruments.map((instrument) => buildMockFavoriteStock(instrument, FAVORITED_AT_FALLBACK)),
-    [favoriteInstruments]
-  );
+  const favoriteStocks = useMemo(() => {
+    const bySymbol = new Map((quotes ?? []).map((q) => [q.providerSymbol, q]));
+    return favoriteInstruments.map((instrument) =>
+      buildFavoriteStock(instrument, bySymbol.get(instrument.providerSymbol), FAVORITED_AT_FALLBACK)
+    );
+  }, [favoriteInstruments, quotes]);
 
-  const jpCount = favoriteStocks.filter((s) => s.instrument.market === "JP").length;
-  const usCount = favoriteStocks.filter((s) => s.instrument.market === "US").length;
+  // 日本株/米国株の比率には投資信託を含めない（市場がJP固定の投資信託が日本株に混入していた: Phase 0-2）。
+  const jpCount = favoriteStocks.filter((s) => getAssetClass(s.instrument) === "jp_stock").length;
+  const usCount = favoriteStocks.filter((s) => getAssetClass(s.instrument) === "us_stock").length;
+  const fundCount = favoriteStocks.filter((s) => getAssetClass(s.instrument) === "fund").length;
+  const stockTotal = jpCount + usCount;
 
   const returns1y = favoriteStocks.map((s) => s.return1y).filter((v): v is number => v !== null);
   const avgReturn1y = returns1y.length > 0 ? returns1y.reduce((a, b) => a + b, 0) / returns1y.length : null;
@@ -35,12 +41,7 @@ export function FavoritesDashboard() {
   const avgDividendYield =
     dividendYields.length > 0 ? dividendYields.reduce((a, b) => a + b, 0) / dividendYields.length : null;
 
-  const basketPoints = useMemo(() => {
-    const seriesList = favoriteInstruments.map((i) => buildMockDailySeriesFor(i, 260 * 3));
-    return computeFavoriteBasketIndex(seriesList);
-  }, [favoriteInstruments]);
-
-  if (isLoading) {
+  if (isLoading || quotesLoading) {
     return (
       <div className="flex flex-col gap-6">
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 2xl:gap-4">
@@ -75,11 +76,17 @@ export function FavoritesDashboard() {
 
   return (
     <div className="flex flex-col gap-6">
+      {quotesError ? (
+        <p role="alert" className="rounded-button border border-danger bg-danger-soft px-3 py-2 text-sm text-danger-text">
+          価格を取得できませんでした。時間をおいて再読み込みしてください（価格は「—」と表示しています）。
+        </p>
+      ) : null}
+
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 2xl:gap-4">
         <MetricCard label="お気に入り銘柄">
           <MetricValue>{favoriteStocks.length}銘柄</MetricValue>
           <MetricDelta>
-            日本 {jpCount} / 米国 {usCount}
+            日本株 {jpCount} / 米国株 {usCount} / 投資信託 {fundCount}
           </MetricDelta>
         </MetricCard>
         <MetricCard
@@ -91,10 +98,10 @@ export function FavoritesDashboard() {
         </MetricCard>
         <MetricCard label="日本株 / 米国株 比率">
           <MetricValue>
-            {favoriteStocks.length > 0 ? Math.round((jpCount / favoriteStocks.length) * 100) : 0}% /{" "}
-            {favoriteStocks.length > 0 ? Math.round((usCount / favoriteStocks.length) * 100) : 0}%
+            {stockTotal > 0 ? Math.round((jpCount / stockTotal) * 100) : 0}% /{" "}
+            {stockTotal > 0 ? Math.round((usCount / stockTotal) * 100) : 0}%
           </MetricValue>
-          <MetricDelta>銘柄数ベース</MetricDelta>
+          <MetricDelta>株式のみ・銘柄数ベース（投資信託は含みません）</MetricDelta>
         </MetricCard>
         <MetricCard label="平均配当利回り（予想）" tooltip={`取得可能な${dividendYields.length}銘柄が対象`}>
           <MetricValue>
@@ -105,10 +112,7 @@ export function FavoritesDashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <BasketIndexChart points={basketPoints} />
-        </div>
-        <div className="rounded-card border border-border bg-surface p-4">
+        <div className="rounded-card border border-border bg-surface p-4 lg:col-span-1">
           <p className="mb-3 text-lg font-bold text-text-primary">日本株 / 米国株比率</p>
           <MarketRatioDonut jpCount={jpCount} usCount={usCount} />
         </div>
@@ -116,7 +120,7 @@ export function FavoritesDashboard() {
 
       <div>
         <p className="mb-3 text-lg font-bold text-text-primary">お気に入り一覧</p>
-        <StockTable stocks={favoriteStocks} showMarketFilter defaultSort="favoritedAt" />
+        <StockTable stocks={favoriteStocks} showAssetClassFilter defaultSort="favoritedAt" />
       </div>
     </div>
   );
