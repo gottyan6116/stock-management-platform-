@@ -9,7 +9,7 @@ import { CurrencyValue } from "@/components/tables/CurrencyValue";
 import { PercentChange } from "@/components/tables/PercentChange";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { SymbolCombobox } from "@/components/search/SymbolCombobox";
-import { formatCurrency } from "@/lib/utils/format";
+import { formatCurrency, formatPrice } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
 
 interface SimulationHoldingItem {
@@ -286,10 +286,10 @@ export function SimulationDashboard() {
                       </td>
                       <td className="px-4 py-3 tabular-nums">{h.quantity.toLocaleString()}株</td>
                       <td className="px-4 py-3">
-                        <CurrencyValue value={h.avgCost} currency={h.currency} />
+                        <CurrencyValue value={h.avgCost} currency={h.currency} kind="price" />
                       </td>
                       <td className="px-4 py-3">
-                        <CurrencyValue value={h.lastClose} currency={h.currency} />
+                        <CurrencyValue value={h.lastClose} currency={h.currency} kind="price" />
                       </td>
                       <td className="px-4 py-3">
                         <PercentChange amount={h.change} percent={h.changePercent} />
@@ -327,11 +327,11 @@ export function SimulationDashboard() {
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
                       <p className="text-[11px] text-text-muted">平均取得価格</p>
-                      <CurrencyValue value={h.avgCost} currency={h.currency} />
+                      <CurrencyValue value={h.avgCost} currency={h.currency} kind="price" />
                     </div>
                     <div>
                       <p className="text-[11px] text-text-muted">現在値</p>
-                      <CurrencyValue value={h.lastClose} currency={h.currency} />
+                      <CurrencyValue value={h.lastClose} currency={h.currency} kind="price" />
                     </div>
                     <div>
                       <p className="text-[11px] text-text-muted">前営業日比</p>
@@ -374,7 +374,7 @@ export function SimulationDashboard() {
                   <span className="font-medium text-text-primary">{t.name}</span>
                 </span>
                 <span className="text-text-secondary tabular-nums">
-                  {t.quantity.toLocaleString()}株 @ {formatCurrency(t.price, t.currency)}
+                  {t.quantity.toLocaleString()}株 @ {formatPrice(t.price, t.currency)}
                 </span>
                 <span className="text-xs text-text-muted">
                   {new Date(t.executedAt).toLocaleString("ja-JP")}

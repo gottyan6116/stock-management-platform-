@@ -24,10 +24,21 @@ const PERCENT_METRIC_KEYS = new Set<MetricKey>([
   "fcf_margin",
 ]);
 
+// AI構造化・JSON取り込みが付与するunitの自由記述のうち、既知の値だけ日本語の単位表記に変換する。
+// 未知のunit文字列（自由記述なので何でも来得る）はcurrency表示か素の数値にフォールバックする。
+const UNIT_SUFFIX_LABEL: Record<string, string> = {
+  x: "倍",
+  JPY_100M: "億円",
+  JPY_TRILLION: "兆円",
+  JPY_PER_SHARE: "円/株",
+};
+
 function formatMetricValue(row: FinancialMetricRow): string {
   const formatted = row.value.toLocaleString("ja-JP", { maximumFractionDigits: 4 });
   const isPercent = row.unit === "percent" || PERCENT_METRIC_KEYS.has(row.metric_key as MetricKey);
   if (isPercent) return `${formatted}%`;
+  const unitSuffix = row.unit ? UNIT_SUFFIX_LABEL[row.unit] : undefined;
+  if (unitSuffix) return `${formatted}${unitSuffix}`;
   if (row.currency) return `${row.currency} ${formatted}`;
   return formatted;
 }

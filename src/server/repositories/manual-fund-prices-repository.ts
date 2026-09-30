@@ -16,6 +16,22 @@ export async function listManualFundPrices(
   return data ?? [];
 }
 
+/** 新しい順に最大limit件。現在の基準価額（limit=1）や前回比の計算に使う。全履歴を引かずに済ませる。 */
+export async function listLatestManualFundPrices(
+  supabase: SupabaseClient<Database>,
+  instrumentId: string,
+  limit: number
+): Promise<ManualFundPriceRow[]> {
+  const { data, error } = await supabase
+    .from("manual_fund_prices")
+    .select("*")
+    .eq("instrument_id", instrumentId)
+    .order("price_date", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data ?? [];
+}
+
 /** その日の基準価額を記録する（1instrument+1日=1件、冪等upsert）。書き込みはservice role専用。 */
 export async function upsertManualFundPrice(
   supabase: SupabaseClient<Database>,

@@ -6,6 +6,12 @@ import { normalizeProviderSymbol } from "@/lib/market-data/normalize";
 import { createClient } from "@/lib/supabase/server";
 import { findInstrumentByProviderSymbol } from "@/server/repositories/instruments-repository";
 import { listManualFundPrices } from "@/server/repositories/manual-fund-prices-repository";
+import { listPositions } from "@/server/repositories/positions-repository";
+import { fundPrice, stockPrice } from "@/lib/pricing/instrument-price";
+import { summarizeHolding } from "@/features/portfolio/holding-summary";
+import { getVisibleDetailTabIds, type DetailTabId } from "@/features/research/visible-tabs";
+import { HoldingStatusPanel } from "@/components/research/HoldingStatusPanel";
+import { ManualMetricForm } from "@/components/research/ManualMetricForm";
 import { ManualFundPriceHistoryForm } from "@/components/funds/ManualFundPriceHistoryForm";
 import type { DailyPrice, Instrument } from "@/types/domain";
 import { MetricCard, MetricValue } from "@/components/ui/MetricCard";
@@ -14,25 +20,23 @@ import { PercentChange } from "@/components/tables/PercentChange";
 import { CurrencyValue } from "@/components/tables/CurrencyValue";
 import { FavoriteToggle } from "@/components/search/FavoriteToggle";
 import { EvidenceCoveragePanel } from "@/components/research/EvidenceCoveragePanel";
-import { InstrumentDetailTabs } from "@/components/research/InstrumentDetailTabs";
+import { InstrumentDetailTabs, type InstrumentDetailTab } from "@/components/research/InstrumentDetailTabs";
 import { ResearchOutlookPanel } from "@/components/research/ResearchOutlookPanel";
 import { ResearchSection } from "@/components/research/ResearchSection";
 import { AnalyticsPanel } from "@/components/ui/AnalyticsPanel";
 import { isSampleResearchEnabled } from "@/config/research";
 import { getResearchOutlook } from "@/features/research/sample-outlooks";
-import { listResearchReports, listFinancialMetrics, getLatestAnalysisRun } from "@/server/repositories/evidence-repository";
+import {
+  listResearchReports,
+  listFinancialMetrics,
+  listManagementStatements,
+  listCompanyEvents,
+  getLatestAnalysisRun,
+} from "@/server/repositories/evidence-repository";
 import { FinancialMetricsPanel } from "@/components/research/FinancialMetricsPanel";
+import { DisclosureStatementsPanel } from "@/components/research/DisclosureStatementsPanel";
 import { AiAnalysisPanel } from "@/components/research/AiAnalysisPanel";
-import { formatDate, formatDateTime, formatPercent } from "@/lib/utils/format";
-
-function UnavailableResearchPanel({ title, description }: { title: string; description: string }) {
-  return (
-    <AnalyticsPanel title={title}>
-      <p className="text-sm font-semibold text-text-primary">実データはまだ接続されていません</p>
-      <p className="mt-1 text-sm leading-6 text-text-secondary">{description}</p>
-    </AnalyticsPanel>
-  );
-}
+import { formatDate, formatPercent } from "@/lib/utils/format";
 
 function tenYearsAgoIso(): string {
   const d = new Date();
@@ -75,6 +79,22 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
     }));
 
     const latest = priceHistory.at(-1) ?? null;
+    // 保有画面と同じ規則（保有ロットの基準価額と履歴のうち新しい方）で「現在の基準価額」を決め、
+    // 画面間で同じファンドの価格が食い違わないようにする（Phase 0-1 / 0-3）。
+    const {
+      data: { user: currentUser },
+    } = await supabase.auth.getUser();
+    const allFundLots = currentUser
+      ? (await listPositions(supabase, currentUser.id).catch(() => [])).filter(
+          (p) => p.instrument.id === manualInstrument.id
+        )
+      : [];
+    const ownLots = allFundLots.filter((p) => p.manualUnitPrice !== null);
+    const newestLot = [...ownLots].sort((a, b) => (b.manualPriceDate ?? "").localeCompare(a.manualPriceDate ?? ""))[0];
+    const currentNav = fundPrice(
+      { manualUnitPrice: newestLot?.manualUnitPrice ?? null, manualPriceDate: newestLot?.manualPriceDate ?? null },
+      latest ? { unitPrice: latest.unit_price, priceDate: latest.price_date } : null
+    );
     const previous = priceHistory.length > 1 ? priceHistory[priceHistory.length - 2]! : null;
     const change = latest && previous ? latest.unit_price - previous.unit_price : null;
     const changePercent =
@@ -93,122 +113,105 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
       instrumentType: manualInstrument.instrument_type,
     };
 
+    const fundHolding = summarizeHolding(
+      allFundLots.map((p) => ({ quantity: p.quantity, avgCost: p.avgCost, nisaType: p.nisaType })),
+      currentNav
+    );
+
+    const fundChart =
+      dailyPrices.length >= 2 ? (
+        <PriceChart dailyPrices={dailyPrices} title={instrument.name} initialMode="line" />
+      ) : (
+        <div className="rounded-card border border-border bg-surface p-6 text-center text-sm text-text-secondary">
+          {dailyPrices.length === 0
+            ? "まだ基準価額の履歴がありません。下のフォームで基準価額を記録すると、ここに推移が表示されます。"
+            : "基準価額の記録が1件のみのため、グラフはまだ表示できません。次回の更新で推移が表示されます。"}
+        </div>
+      );
+
+    const fundTabDefs: Partial<Record<DetailTabId, InstrumentDetailTab>> = {
+      overview: {
+        id: "overview",
+        label: "概要",
+        content: (
+          <div className="space-y-4">
+            {fundChart}
+            <HoldingStatusPanel summary={fundHolding} currency={instrument.currency} isFund />
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+              <MetricCard label="最新基準価額（1万口あたり）">
+                <MetricValue>
+                  <CurrencyValue value={currentNav.displayPrice} currency={instrument.currency} kind="price" />
+                </MetricValue>
+              </MetricCard>
+              <MetricCard label="前回更新比">
+                <MetricValue>
+                  <PercentChange amount={change} percent={changePercent} />
+                </MetricValue>
+              </MetricCard>
+              <MetricCard label="更新回数">
+                <MetricValue>{priceHistory.length}回</MetricValue>
+              </MetricCard>
+            </div>
+          </div>
+        ),
+      },
+      financials: {
+        id: "financials",
+        label: "決算・財務",
+        content: <FinancialMetricsPanel providerSymbol={manualInstrument.provider_symbol} metrics={manualFinancialMetrics} />,
+      },
+      research: {
+        id: "research",
+        label: "リサーチ",
+        content: (
+          <div className="space-y-4">
+            <ResearchSection providerSymbol={manualInstrument.provider_symbol} reports={manualResearchReports} />
+            {manualFinancialMetrics.length === 0 ? (
+              <AnalyticsPanel title="決算指標を手入力">
+                <ManualMetricForm providerSymbol={manualInstrument.provider_symbol} />
+              </AnalyticsPanel>
+            ) : null}
+          </div>
+        ),
+      },
+      "ai-analysis": {
+        id: "ai-analysis",
+        label: "AI分析",
+        content: <AiAnalysisPanel providerSymbol={manualInstrument.provider_symbol} latestRun={manualLatestAnalysisRun} />,
+      },
+    };
+    const fundTabs = getVisibleDetailTabIds({
+      hasSampleOutlook: false,
+      financialMetricCount: manualFinancialMetrics.length,
+      managementStatementCount: 0,
+      companyEventCount: 0,
+      researchReportCount: manualResearchReports.length,
+      hasAnalysisRun: manualLatestAnalysisRun !== null,
+    })
+      .map((id) => fundTabDefs[id])
+      .filter((tab): tab is InstrumentDetailTab => tab !== undefined);
+
     return (
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-3">
           <Link
-            href="/funds"
-            className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-text-secondary hover:text-primary"
+            href="/portfolio"
+            className="inline-flex min-h-11 w-fit items-center gap-1.5 text-sm font-medium text-text-secondary hover:text-primary"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden />
             戻る
           </Link>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-2xl font-bold text-text-primary md:text-[30px]">
-                {instrument.name}
-              </h1>
-              <p className="text-sm text-text-secondary">
-                投資信託（手入力） · {instrument.currency}
-              </p>
+              <h1 className="text-2xl font-bold text-text-primary">{instrument.name}</h1>
+              <p className="text-sm text-text-secondary">投資信託（手入力） · {instrument.currency}</p>
             </div>
             <FavoriteToggle instrument={instrument} />
           </div>
-          <p className="text-xs text-text-muted">
-            基準価額 更新日 {formatDate(latest?.price_date ?? null)}
-          </p>
+          <p className="text-xs text-text-muted">基準価額 更新日 {formatDate(currentNav.priceDate)}</p>
         </div>
 
-        <InstrumentDetailTabs
-          tabs={[
-            {
-              id: "overview",
-              label: "概要",
-              content: (
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-                  <MetricCard label="最新基準価額（1万口あたり）">
-                    <MetricValue>
-                      <CurrencyValue
-                        value={latest?.unit_price ?? null}
-                        currency={instrument.currency}
-                      />
-                    </MetricValue>
-                  </MetricCard>
-                  <MetricCard label="前回更新比">
-                    <MetricValue>
-                      <PercentChange amount={change} percent={changePercent} />
-                    </MetricValue>
-                  </MetricCard>
-                  <MetricCard label="更新回数">
-                    <MetricValue>{priceHistory.length}回</MetricValue>
-                  </MetricCard>
-                </div>
-              ),
-            },
-            {
-              id: "chart",
-              label: "チャート",
-              content:
-                dailyPrices.length >= 2 ? (
-                  <PriceChart
-                    dailyPrices={dailyPrices}
-                    title={instrument.name}
-                    initialMode="line"
-                  />
-                ) : (
-                  <div className="rounded-card border border-border bg-surface p-8 text-center text-sm text-text-secondary">
-                    {dailyPrices.length === 0
-                      ? "まだ基準価額の履歴がありません。ポートフォリオで基準価額を入力すると、ここに履歴が記録されます。"
-                      : "基準価額の記録が1件のみのため、グラフはまだ表示できません。次回の更新で推移が表示されます。"}
-                  </div>
-                ),
-            },
-            {
-              id: "evidence",
-              label: "根拠資料",
-              content: (
-                <AnalyticsPanel title="データの出所">
-                  <p className="text-sm font-semibold text-text-primary">
-                    外部の自動取得データは未接続です。表示中の基準価額はあなたが入力した履歴です。
-                  </p>
-                  <p className="mt-1 text-sm leading-6 text-text-secondary">
-                    自動更新は行われません。最終取得: {formatDateTime(latest?.fetched_at ?? null)}
-                  </p>
-                </AnalyticsPanel>
-              ),
-            },
-            {
-              id: "financials",
-              label: "決算・財務",
-              content: (
-                <FinancialMetricsPanel
-                  providerSymbol={manualInstrument.provider_symbol}
-                  metrics={manualFinancialMetrics}
-                />
-              ),
-            },
-            {
-              id: "research",
-              label: "リサーチ",
-              content: (
-                <ResearchSection
-                  providerSymbol={manualInstrument.provider_symbol}
-                  reports={manualResearchReports}
-                />
-              ),
-            },
-            {
-              id: "ai-analysis",
-              label: "AI分析",
-              content: (
-                <AiAnalysisPanel
-                  providerSymbol={manualInstrument.provider_symbol}
-                  latestRun={manualLatestAnalysisRun}
-                />
-              ),
-            },
-          ]}
-        />
+        <InstrumentDetailTabs tabs={fundTabs} />
 
         <ManualFundPriceHistoryForm instrumentId={manualInstrument.id} />
       </div>
@@ -238,13 +241,15 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
     provider.getDailyPrices(providerSymbol, tenYearsAgoIso(), todayIso()).catch(() => []),
     findInstrumentByProviderSymbol(supabase, providerSymbol).catch(() => null),
   ]);
-  const [researchReports, financialMetrics, latestAnalysisRun] = existingDbInstrument
+  const [researchReports, financialMetrics, managementStatements, companyEvents, latestAnalysisRun] = existingDbInstrument
     ? await Promise.all([
         listResearchReports(supabase, existingDbInstrument.id).catch(() => []),
         listFinancialMetrics(supabase, existingDbInstrument.id).catch(() => []),
+        listManagementStatements(supabase, existingDbInstrument.id).catch(() => []),
+        listCompanyEvents(supabase, existingDbInstrument.id).catch(() => []),
         getLatestAnalysisRun(supabase, existingDbInstrument.id).catch(() => null),
       ])
-    : [[], [], null];
+    : [[], [], [], [], null];
 
   const lastClose = dailyPrices.at(-1)?.adjustedClose ?? null;
   const oneYearAgoIndex = Math.max(0, dailyPrices.length - 253);
@@ -256,21 +261,118 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
   const sampleResearchEnabled = isSampleResearchEnabled();
   const outlook = sampleResearchEnabled ? getResearchOutlook(instrument.providerSymbol) : null;
 
+  const {
+    data: { user: currentUser },
+  } = await supabase.auth.getUser();
+  const stockLots =
+    currentUser && existingDbInstrument
+      ? (await listPositions(supabase, currentUser.id).catch(() => [])).filter(
+          (p) => p.instrument.id === existingDbInstrument.id
+        )
+      : [];
+  const stockHolding = summarizeHolding(
+    stockLots.map((p) => ({ quantity: p.quantity, avgCost: p.avgCost, nisaType: p.nisaType })),
+    stockPrice(quote?.close ?? null, quote?.priceDate ?? null)
+  );
+
+  const stockTabDefs: Partial<Record<DetailTabId, InstrumentDetailTab>> = {
+    overview: {
+      id: "overview",
+      label: "概要",
+      content: (
+        <div className="space-y-4">
+          <PriceChart dailyPrices={dailyPrices} title={instrument.name} />
+          <HoldingStatusPanel summary={stockHolding} currency={instrument.currency} isFund={false} />
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+            <MetricCard label="最新終値">
+              <MetricValue>
+                <CurrencyValue value={quote?.close ?? null} currency={instrument.currency} kind="price" />
+              </MetricValue>
+            </MetricCard>
+            <MetricCard label="前営業日比">
+              <MetricValue>
+                <PercentChange amount={quote?.change ?? null} percent={quote?.changePercent ?? null} />
+              </MetricValue>
+            </MetricCard>
+            <MetricCard label="1年騰落率">
+              <MetricValue>{formatPercent(return1y)}</MetricValue>
+            </MetricCard>
+            <MetricCard label="配当利回り（予想）">
+              <MetricValue>
+                {quote?.dividendYield !== null && quote?.dividendYield !== undefined
+                  ? `${quote.dividendYield.toFixed(2)}%`
+                  : "—"}
+              </MetricValue>
+            </MetricCard>
+            <MetricCard label="PER">
+              <MetricValue>
+                {quote?.trailingPE !== null && quote?.trailingPE !== undefined ? quote.trailingPE.toFixed(2) : "—"}
+              </MetricValue>
+            </MetricCard>
+          </div>
+        </div>
+      ),
+    },
+    outlook: { id: "outlook", label: "見通し", content: <ResearchOutlookPanel outlook={outlook} /> },
+    financials: {
+      id: "financials",
+      label: "決算・財務",
+      content: <FinancialMetricsPanel providerSymbol={instrument.providerSymbol} metrics={financialMetrics} />,
+    },
+    statements: {
+      id: "statements",
+      label: "開示・発言",
+      content: <DisclosureStatementsPanel statements={managementStatements} events={companyEvents} />,
+    },
+    evidence: {
+      id: "evidence",
+      label: "根拠資料",
+      content: <EvidenceCoveragePanel dataKind={outlook?.dataKind ?? "unavailable"} evidence={outlook?.evidence ?? []} />,
+    },
+    research: {
+      id: "research",
+      label: "リサーチ",
+      content: (
+        <div className="space-y-4">
+          <ResearchSection providerSymbol={instrument.providerSymbol} reports={researchReports} />
+          {financialMetrics.length === 0 ? (
+            <AnalyticsPanel title="決算指標を手入力">
+              <ManualMetricForm providerSymbol={instrument.providerSymbol} />
+            </AnalyticsPanel>
+          ) : null}
+        </div>
+      ),
+    },
+    "ai-analysis": {
+      id: "ai-analysis",
+      label: "AI分析",
+      content: <AiAnalysisPanel providerSymbol={instrument.providerSymbol} latestRun={latestAnalysisRun} />,
+    },
+  };
+  const stockTabs = getVisibleDetailTabIds({
+    hasSampleOutlook: outlook !== null,
+    financialMetricCount: financialMetrics.length,
+    managementStatementCount: managementStatements.length,
+    companyEventCount: companyEvents.length,
+    researchReportCount: researchReports.length,
+    hasAnalysisRun: latestAnalysisRun !== null,
+  })
+    .map((id) => stockTabDefs[id])
+    .filter((tab): tab is InstrumentDetailTab => tab !== undefined);
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
         <Link
-          href={instrument.market === "JP" ? "/japan" : "/us"}
-          className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-text-secondary hover:text-primary"
+          href={stockHolding ? "/portfolio" : "/candidates"}
+          className="inline-flex min-h-11 w-fit items-center gap-1.5 text-sm font-medium text-text-secondary hover:text-primary"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
           戻る
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-text-primary md:text-[30px]">
-              {instrument.name}
-            </h1>
+            <h1 className="text-2xl font-bold text-text-primary">{instrument.name}</h1>
             <p className="text-sm text-text-secondary">
               {instrument.displaySymbol} · {instrument.exchange ?? "—"} · {instrument.currency}
             </p>
@@ -280,139 +382,7 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
         <p className="text-xs text-text-muted">価格基準日 {formatDate(quote?.priceDate ?? null)}</p>
       </div>
 
-      <InstrumentDetailTabs
-        tabs={[
-          {
-            id: "overview",
-            label: "概要",
-            content: (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                  <MetricCard label="最新終値">
-                    <MetricValue>
-                      <CurrencyValue value={quote?.close ?? null} currency={instrument.currency} />
-                    </MetricValue>
-                  </MetricCard>
-                  <MetricCard label="前営業日比">
-                    <MetricValue>
-                      <PercentChange
-                        amount={quote?.change ?? null}
-                        percent={quote?.changePercent ?? null}
-                      />
-                    </MetricValue>
-                  </MetricCard>
-                  <MetricCard label="1年騰落率">
-                    <MetricValue>{formatPercent(return1y)}</MetricValue>
-                  </MetricCard>
-                  <MetricCard label="配当利回り（予想）">
-                    <MetricValue>
-                      {quote?.dividendYield !== null && quote?.dividendYield !== undefined
-                        ? `${quote.dividendYield.toFixed(2)}%`
-                        : "—"}
-                    </MetricValue>
-                  </MetricCard>
-                </div>
-
-                <AnalyticsPanel title="指標">
-                  <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-                    <div>
-                      <dt className="text-text-muted">配当利回り</dt>
-                      <dd className="font-semibold text-text-primary">
-                        {quote?.dividendYield !== null && quote?.dividendYield !== undefined
-                          ? `${quote.dividendYield.toFixed(2)}%`
-                          : "—"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-text-muted">PER</dt>
-                      <dd className="font-semibold text-text-primary">
-                        {quote?.trailingPE !== null && quote?.trailingPE !== undefined
-                          ? quote.trailingPE.toFixed(2)
-                          : "—"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-text-muted">通貨</dt>
-                      <dd className="font-semibold text-text-primary">{instrument.currency}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-text-muted">取引所</dt>
-                      <dd className="font-semibold text-text-primary">
-                        {instrument.exchange ?? "—"}
-                      </dd>
-                    </div>
-                  </dl>
-                </AnalyticsPanel>
-              </div>
-            ),
-          },
-          {
-            id: "outlook",
-            label: "見通し",
-            content: <ResearchOutlookPanel outlook={outlook} />,
-          },
-          {
-            id: "chart-demand",
-            label: "チャート・需給",
-            content: (
-              <div className="space-y-4">
-                <PriceChart dailyPrices={dailyPrices} title={instrument.name} />
-                <UnavailableResearchPanel
-                  title="板・需給"
-                  description="リアルタイムの板情報と需給データは未接続です。現在は過去の価格チャートのみ確認できます。"
-                />
-              </div>
-            ),
-          },
-          {
-            id: "financials",
-            label: "決算・財務",
-            content: (
-              <FinancialMetricsPanel providerSymbol={instrument.providerSymbol} metrics={financialMetrics} />
-            ),
-          },
-          {
-            id: "competitors",
-            label: "競合比較",
-            content: (
-              <UnavailableResearchPanel
-                title="競合比較"
-                description="競合企業と業界比較の実データは未接続です。比較値は表示していません。"
-              />
-            ),
-          },
-          {
-            id: "statements",
-            label: "開示・発言",
-            content: (
-              <UnavailableResearchPanel
-                title="開示・発言"
-                description="適時開示、決算説明資料、経営者や投資家の発言データは未接続です。未確認の内容は表示していません。"
-              />
-            ),
-          },
-          {
-            id: "evidence",
-            label: "根拠資料",
-            content: (
-              <EvidenceCoveragePanel
-                dataKind={outlook?.dataKind ?? "unavailable"}
-                evidence={outlook?.evidence ?? []}
-              />
-            ),
-          },
-          {
-            id: "research",
-            label: "リサーチ",
-            content: <ResearchSection providerSymbol={instrument.providerSymbol} reports={researchReports} />,
-          },
-          {
-            id: "ai-analysis",
-            label: "AI分析",
-            content: <AiAnalysisPanel providerSymbol={instrument.providerSymbol} latestRun={latestAnalysisRun} />,
-          },
-        ]}
-      />
+      <InstrumentDetailTabs tabs={stockTabs} />
     </div>
   );
 }

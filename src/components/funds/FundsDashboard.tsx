@@ -3,25 +3,24 @@
 import { useMemo } from "react";
 import { PiggyBank } from "lucide-react";
 import { useFavorites } from "@/features/favorites/FavoritesProvider";
-import { buildMockFavoriteStock } from "@/lib/mock/favorite-stocks";
+import { useFavoriteQuotes } from "@/features/favorites/quotes";
+import { buildFavoriteStock } from "@/features/favorites/build-favorite-stock";
 import { StockTable } from "@/components/tables/StockTable";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { TableSkeleton } from "@/components/feedback/Skeleton";
 
 export function FundsDashboard() {
   const { favoriteInstruments, isLoading } = useFavorites();
+  const { data: quotes, isLoading: quotesLoading } = useFavoriteQuotes();
 
-  const fundInstruments = useMemo(
-    () => favoriteInstruments.filter((i) => i.instrumentType === "fund"),
-    [favoriteInstruments]
-  );
+  const fundStocks = useMemo(() => {
+    const bySymbol = new Map((quotes ?? []).map((q) => [q.providerSymbol, q]));
+    return favoriteInstruments
+      .filter((i) => i.instrumentType === "fund")
+      .map((i) => buildFavoriteStock(i, bySymbol.get(i.providerSymbol), new Date().toISOString()));
+  }, [favoriteInstruments, quotes]);
 
-  const fundStocks = useMemo(
-    () => fundInstruments.map((i) => buildMockFavoriteStock(i, new Date().toISOString())),
-    [fundInstruments]
-  );
-
-  if (isLoading) {
+  if (isLoading || quotesLoading) {
     return <TableSkeleton />;
   }
 

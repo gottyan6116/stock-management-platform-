@@ -173,16 +173,24 @@ export const ResearchImportSchema = z
       exchange: z.string().trim().min(1, "company.exchange is required"),
     }),
     researchDate: isoDateSchema,
-    sources: z.array(SourceSchema).max(50, "sources must not exceed 50 entries"),
-    financials: z.array(FinancialMetricInputSchema).max(200, "financials must not exceed 200 entries"),
+    // 各配列は「省略された」場合に空配列として扱う（.default([])）。外部AI（Cloudflare Workers AIや
+    // ChatGPT等）は、該当項目が無いカテゴリのキー自体を出力から省略することがあり、必須のままだと
+    // その1カテゴリの省略だけでインポート全体が失敗してしまう。空配列を明示的に送るケースと省略した
+    // ケースを区別する必要は無い（insertJsonImport等は配列の中身しか見ない）ため、安全に緩和できる。
+    sources: z.array(SourceSchema).max(50, "sources must not exceed 50 entries").default([]),
+    financials: z.array(FinancialMetricInputSchema).max(200, "financials must not exceed 200 entries").default([]),
     valuation: z.record(z.string(), z.unknown()).optional(),
     managementStatements: z
       .array(ManagementStatementInputSchema)
-      .max(200, "managementStatements must not exceed 200 entries"),
-    catalysts: z.array(CatalystInputSchema).max(200, "catalysts must not exceed 200 entries"),
-    risks: z.array(RiskInputSchema).max(200, "risks must not exceed 200 entries"),
-    investorOpinions: z.array(ExternalOpinionInputSchema).max(200, "investorOpinions must not exceed 200 entries"),
-    events: z.array(EventInputSchema).max(200, "events must not exceed 200 entries"),
+      .max(200, "managementStatements must not exceed 200 entries")
+      .default([]),
+    catalysts: z.array(CatalystInputSchema).max(200, "catalysts must not exceed 200 entries").default([]),
+    risks: z.array(RiskInputSchema).max(200, "risks must not exceed 200 entries").default([]),
+    investorOpinions: z
+      .array(ExternalOpinionInputSchema)
+      .max(200, "investorOpinions must not exceed 200 entries")
+      .default([]),
+    events: z.array(EventInputSchema).max(200, "events must not exceed 200 entries").default([]),
     summary: z.string().trim().min(1, "summary is required"),
   })
   .superRefine((data, ctx) => {
