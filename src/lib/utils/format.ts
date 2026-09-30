@@ -91,3 +91,9 @@ export function formatDateTimeCompact(isoStr: string | null): string {
   if (!p) return "—";
   return `${p.m}/${p.d} ${p.hh}:${p.mm}`;
 }
+
+/** 今日の日付（JST, YYYY-MM-DD）。サーバー(UTC)でもブラウザでも同じ結果になる。 */
+export function todayJst(now: Date = new Date()): string {
+  const p = jstParts(now.toISOString());
+  return `${p!.y}-${p!.m}-${p!.d}`;
+}

@@ -88,3 +88,32 @@ export async function removePosition(supabase: SupabaseClient<Database>, userId:
 
   if (error) throw error;
 }
+
+export interface PositionPatch {
+  quantity?: number;
+  avgCost?: number | null;
+  nisaType?: NisaType;
+}
+
+/** 数量・取得単価・口座の編集。対象が自分の保有でなければ null（RLSとuser_id絞り込みの両方で保護）。 */
+export async function updatePosition(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  positionId: string,
+  patch: PositionPatch
+): Promise<Database["public"]["Tables"]["positions"]["Row"] | null> {
+  const update: Database["public"]["Tables"]["positions"]["Update"] = {};
+  if (patch.quantity !== undefined) update.quantity = patch.quantity;
+  if (patch.avgCost !== undefined) update.avg_cost = patch.avgCost;
+  if (patch.nisaType !== undefined) update.nisa_type = patch.nisaType;
+
+  const { data, error } = await supabase
+    .from("positions")
+    .update(update)
+    .eq("user_id", userId)
+    .eq("id", positionId)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}

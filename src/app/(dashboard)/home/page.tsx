@@ -1,5 +1,5 @@
-import { AssetGrowthDashboard } from "@/components/home/AssetGrowthDashboard";
+import { HomeDashboard } from "@/components/home/HomeDashboard";
 
 export default function HomePage() {
-  return <AssetGrowthDashboard />;
+  return <HomeDashboard />;
 }

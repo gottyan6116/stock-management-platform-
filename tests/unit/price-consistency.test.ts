@@ -50,6 +50,7 @@ function quoteItem(providerSymbol: string, price: ReturnType<typeof stockPrice>)
 function positionFor(instrument: Instrument, price: ReturnType<typeof stockPrice>, quantity: number): PositionApiItem {
   return {
     id: "p",
+    instrumentId: instrument.id,
     quantity,
     avgCost: null,
     nisaType: null,

@@ -38,6 +38,7 @@ export async function GET() {
 
         const common = {
           id: position.id,
+          instrumentId: position.instrument.id,
           quantity: position.quantity,
           nisaType: position.nisaType,
           providerSymbol: position.instrument.provider_symbol,

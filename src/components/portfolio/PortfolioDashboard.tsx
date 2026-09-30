@@ -1,583 +1,142 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Briefcase, Trash2 } from "lucide-react";
-import { MetricCard, MetricValue } from "@/components/ui/MetricCard";
-import { AssetClassBadge } from "@/components/tables/AssetClassBadge";
-import { PercentChange } from "@/components/tables/PercentChange";
-import { CurrencyValue } from "@/components/tables/CurrencyValue";
-import { EmptyState } from "@/components/feedback/EmptyState";
-import { Modal } from "@/components/ui/Modal";
+import { useQuery } from "@tanstack/react-query";
+import { Briefcase } from "lucide-react";
 import { PageHeader } from "@/components/app-shell/PageHeader";
+import { EmptyState } from "@/components/feedback/EmptyState";
+import { SignedAmount } from "@/components/ui/SignedAmount";
 import { getNavLabel } from "@/config/navigation";
-import { SymbolCombobox } from "@/components/search/SymbolCombobox";
-import { FundNameCombobox } from "@/components/search/FundNameCombobox";
-import { formatCurrency, formatPercent } from "@/lib/utils/format";
-import { cn } from "@/lib/utils/cn";
 import { fetchPositions, POSITIONS_KEY } from "@/features/portfolio/api";
-import { evaluatePositions, summarizeByCurrency } from "@/features/portfolio/summary";
-import type { NisaType } from "@/features/portfolio/types";
-import { ASSET_CLASS_LABEL, type AssetClass } from "@/lib/domain/asset-class";
+import { useUsdJpy } from "@/features/portfolio/fx";
+import { evaluatePositions } from "@/features/portfolio/summary";
+import type { EvaluatedPosition } from "@/features/portfolio/types";
+import {
+  ACCOUNT_LABEL,
+  ACCOUNT_ORDER,
+  accountKeyOf,
+  listStaleFundIds,
+  summarizePortfolioJpy,
+  type AccountKey,
+} from "@/lib/portfolio/valuation";
+import { formatCurrency, todayJst } from "@/lib/utils/format";
+import { cn } from "@/lib/utils/cn";
+import { AddPositionDialog } from "./AddPositionDialog";
+import { DeletePositionDialog } from "./DeletePositionDialog";
+import { EditPositionDialog } from "./EditPositionDialog";
+import { FundNavDialog } from "./FundNavDialog";
+import { HoldingsGroups } from "./HoldingsGroups";
 
-type Tab = "all" | "tsumitate" | "growth" | AssetClass;
-
-// 区分は資産クラス（投資信託／日本株／米国株）で切り替える。市場(JP/US)で切ると、
-// 市場がJP固定で保存されている投資信託が「日本株」に混ざってしまう（Phase 0-2）。
-const TABS: { value: Tab; label: string }[] = [
-  { value: "all", label: "すべて" },
-  { value: "tsumitate", label: "積立NISA" },
-  { value: "growth", label: "成長投資枠" },
-  { value: "fund", label: ASSET_CLASS_LABEL.fund },
-  { value: "jp_stock", label: ASSET_CLASS_LABEL.jp_stock },
-  { value: "us_stock", label: ASSET_CLASS_LABEL.us_stock },
-];
-
-const NISA_LABEL: Record<Exclude<NisaType, null>, string> = {
-  tsumitate: "積立NISA",
-  growth: "成長投資枠",
-};
-
-interface AddPositionInput {
-  providerSymbol?: string;
-  manualName?: string;
-  manualUnitPrice?: string;
-  quantity: number;
-  avgCost: string;
-  nisaType: NisaType;
-}
-
-async function addPosition(input: AddPositionInput) {
-  const res = await fetch("/api/positions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      providerSymbol: input.providerSymbol,
-      manualName: input.manualName,
-      manualUnitPrice: input.manualUnitPrice === "" ? undefined : Number(input.manualUnitPrice),
-      quantity: input.quantity,
-      avgCost: input.avgCost === "" ? undefined : Number(input.avgCost),
-      nisaType: input.nisaType ?? undefined,
-    }),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(body?.error?.message ?? `add position failed: ${res.status}`);
-  }
-}
-
-async function deletePosition(positionId: string) {
-  const res = await fetch(`/api/positions/${encodeURIComponent(positionId)}`, { method: "DELETE" });
-  if (!res.ok) throw new Error(`delete position failed: ${res.status}`);
-}
+type AccountFilter = "all" | AccountKey;
 
 export function PortfolioDashboard() {
-  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: POSITIONS_KEY, queryFn: fetchPositions });
+  const { data: fx = null } = useUsdJpy();
   const positions = useMemo(() => data ?? [], [data]);
 
-  const [tab, setTab] = useState<Tab>("all");
+  const [accountFilter, setAccountFilter] = useState<AccountFilter>("all");
   const [addOpen, setAddOpen] = useState(false);
-  const [isManualMode, setIsManualMode] = useState(false);
-  const [symbol, setSymbol] = useState("");
-  const [manualName, setManualName] = useState("");
-  const [manualUnitPrice, setManualUnitPrice] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [avgCost, setAvgCost] = useState("");
-  const [nisaType, setNisaType] = useState<NisaType>(null);
-  const [formError, setFormError] = useState<string | null>(null);
-
-  const addMutation = useMutation({
-    mutationFn: addPosition,
-    onSuccess: () => {
-      setSymbol("");
-      setManualName("");
-      setManualUnitPrice("");
-      setQuantity("");
-      setAvgCost("");
-      setNisaType(null);
-      setFormError(null);
-      setAddOpen(false);
-      queryClient.invalidateQueries({ queryKey: POSITIONS_KEY });
-    },
-    onError: (error: Error) => setFormError(error.message),
-  });
-
-  const removeMutation = useMutation({
-    mutationFn: deletePosition,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: POSITIONS_KEY }),
-  });
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const quantityNum = Number(quantity);
-    if (!Number.isFinite(quantityNum) || quantityNum <= 0) {
-      setFormError("保有数量（正の数）を入力してください。");
-      return;
-    }
-    if (isManualMode) {
-      if (!manualName.trim() || manualUnitPrice === "") {
-        setFormError("ファンド名と基準価額を入力してください。");
-        return;
-      }
-      addMutation.mutate({
-        manualName: manualName.trim(),
-        manualUnitPrice,
-        quantity: quantityNum,
-        avgCost,
-        nisaType,
-      });
-    } else {
-      if (!symbol.trim()) {
-        setFormError("銘柄コードを入力してください。");
-        return;
-      }
-      addMutation.mutate({
-        providerSymbol: symbol.trim(),
-        quantity: quantityNum,
-        avgCost,
-        nisaType,
-      });
-    }
-  }
+  const [navOpen, setNavOpen] = useState(false);
+  const [editing, setEditing] = useState<EvaluatedPosition | null>(null);
+  const [deleting, setDeleting] = useState<EvaluatedPosition | null>(null);
 
   const evaluated = useMemo(() => evaluatePositions(positions), [positions]);
+  const overall = useMemo(() => summarizePortfolioJpy(evaluated, fx), [evaluated, fx]);
+  const staleFundIds = useMemo(() => listStaleFundIds(evaluated, todayJst()), [evaluated]);
 
-  const filtered = useMemo(() => {
-    if (tab === "all") return evaluated;
-    if (tab === "tsumitate" || tab === "growth") return evaluated.filter((p) => p.nisaType === tab);
-    return evaluated.filter((p) => p.assetClass === tab);
-  }, [evaluated, tab]);
+  // 実際に保有がある口座だけをチップに出す。
+  const presentAccounts = useMemo(
+    () => ACCOUNT_ORDER.filter((key) => evaluated.some((p) => accountKeyOf(p.nisaType) === key)),
+    [evaluated]
+  );
+  const rows = useMemo(
+    () => (accountFilter === "all" ? evaluated : evaluated.filter((p) => accountKeyOf(p.nisaType) === accountFilter)),
+    [evaluated, accountFilter]
+  );
 
-  const currencySummaries = useMemo(() => summarizeByCurrency(filtered), [filtered]);
-  const valuationSummaries = currencySummaries.filter((summary) => summary.hasValuation);
-  const profitSummaries = currencySummaries.filter((summary) => summary.hasCostBasis);
-  const hasPartialValuation = currencySummaries.some((summary) => !summary.isValuationComplete);
-  const hasPartialProfit = currencySummaries.some((summary) => !summary.isCostBasisComplete);
+  const hasFunds = evaluated.some((p) => p.assetClass === "fund");
+  const usdExcluded = !fx && evaluated.some((p) => p.currency === "USD" && p.marketValue !== null);
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title={getNavLabel("/portfolio")}
-        description={`${filtered.length}件`}
+        description={
+          evaluated.length === 0 ? undefined : (
+            <span className="tabular-nums">
+              {evaluated.length}件・評価額 {formatCurrency(overall.totalValueJpy, "JPY")}・含み損益{" "}
+              <SignedAmount value={overall.unrealizedPnlJpy} currency="JPY" className="font-semibold" />
+            </span>
+          )
+        }
         actions={
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className="inline-flex min-h-11 items-center rounded-button bg-text-primary px-4 text-sm font-semibold text-white hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
-          >
-            ＋ 保有を追加
-          </button>
+          <>
+            {hasFunds ? (
+              <button
+                type="button"
+                onClick={() => setNavOpen(true)}
+                className="inline-flex min-h-11 items-center rounded-button border border-border bg-surface px-4 text-sm font-semibold text-text-primary hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                基準価額を更新
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className="inline-flex min-h-11 items-center rounded-button bg-text-primary px-4 text-sm font-semibold text-white hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
+            >
+              ＋ 保有を追加
+            </button>
+          </>
         }
       />
 
-      <div
-        role="tablist"
-        aria-label="ポートフォリオの表示切替"
-        className="inline-flex flex-wrap gap-1 rounded-button border border-border bg-surface-subtle p-0.5"
-      >
-        {TABS.map((t) => (
-          <button
-            key={t.value}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.value}
-            onClick={() => setTab(t.value)}
-            className={cn(
-              "rounded-sm px-3 py-1.5 text-xs font-semibold transition-colors",
-              tab === t.value
-                ? "bg-surface text-primary shadow-card"
-                : "text-text-secondary hover:text-text-primary"
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 2xl:gap-4">
-        <MetricCard label="保有銘柄数">
-          <MetricValue>{filtered.length}銘柄</MetricValue>
-        </MetricCard>
-        <MetricCard label={hasPartialValuation ? "評価額（一部未計算）" : "評価額合計"}>
-          <MetricValue>
-            {valuationSummaries.length === 0
-              ? "—"
-              : valuationSummaries
-                  .map((summary) => formatCurrency(summary.marketValue, summary.currency))
-                  .join(" + ")}
-          </MetricValue>
-        </MetricCard>
-        <MetricCard
-          label={hasPartialProfit ? "評価損益（概算・一部未計算）" : "評価損益合計（概算）"}
-        >
-          {profitSummaries.length === 0 ? (
-            <MetricValue>—</MetricValue>
-          ) : (
-            <div className="flex flex-col gap-0.5">
-              {profitSummaries.map((summary) => {
-                const percent =
-                  summary.costBasis !== 0
-                    ? (summary.unrealizedPnl / summary.costBasis) * 100
-                    : null;
-                const isUp = summary.unrealizedPnl > 0;
-                const isDown = summary.unrealizedPnl < 0;
-                const colorClass = isUp
-                  ? "text-success"
-                  : isDown
-                    ? "text-danger"
-                    : "text-text-primary";
-                return (
-                  <p
-                    key={summary.currency}
-                    className={cn("text-lg font-bold tabular-nums 2xl:text-[26px]", colorClass)}
-                  >
-                    {summary.unrealizedPnl > 0 ? "+" : ""}
-                    {formatCurrency(summary.unrealizedPnl, summary.currency)}
-                    {percent !== null ? (
-                      <span className="ml-1 text-sm font-semibold 2xl:text-base">
-                        ({formatPercent(percent)})
-                      </span>
-                    ) : null}
-                  </p>
-                );
-              })}
-            </div>
-          )}
-        </MetricCard>
-      </div>
-
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="保有を追加">
-        <div className="mb-3 flex justify-end">
-          <div
-            role="group"
-            aria-label="登録方法切替"
-            className="inline-flex rounded-button border border-border p-0.5"
-          >
+      {presentAccounts.length > 1 ? (
+        <div role="group" aria-label="口座で絞り込み" className="flex flex-wrap gap-2">
+          {(["all", ...presentAccounts] as const).map((key) => (
             <button
+              key={key}
               type="button"
-              onClick={() => setIsManualMode(false)}
+              aria-pressed={accountFilter === key}
+              onClick={() => setAccountFilter(key)}
               className={cn(
-                "rounded-sm px-3 py-1 text-xs font-semibold",
-                !isManualMode ? "bg-primary-soft text-primary" : "text-text-secondary"
+                "min-h-11 rounded-full border px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus",
+                accountFilter === key
+                  ? "border-text-primary bg-text-primary text-white"
+                  : "border-border bg-surface text-text-secondary hover:bg-surface-subtle"
               )}
             >
-              株式・ETF
+              {key === "all" ? "すべての口座" : ACCOUNT_LABEL[key]}
             </button>
-            <button
-              type="button"
-              onClick={() => setIsManualMode(true)}
-              className={cn(
-                "rounded-sm px-3 py-1 text-xs font-semibold",
-                isManualMode ? "bg-primary-soft text-primary" : "text-text-secondary"
-              )}
-            >
-              投資信託（手入力）
-            </button>
-          </div>
+          ))}
         </div>
+      ) : null}
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end">
-            {isManualMode ? (
-              <div className="flex flex-1 flex-col gap-1">
-                <label
-                  htmlFor="position-fund-name"
-                  className="text-xs font-semibold text-text-secondary"
-                >
-                  ファンド名
-                </label>
-                <FundNameCombobox
-                  id="position-fund-name"
-                  value={manualName}
-                  onChange={setManualName}
-                  placeholder="eMAXIS Slim 全世界株式(オール・カントリー)"
-                />
-              </div>
-            ) : (
-              <div className="flex flex-1 flex-col gap-1">
-                <label
-                  htmlFor="position-symbol"
-                  className="text-xs font-semibold text-text-secondary"
-                >
-                  銘柄コードまたは銘柄名（例: 7203.T, AAPL, トヨタ）
-                </label>
-                <SymbolCombobox
-                  id="position-symbol"
-                  value={symbol}
-                  onChange={setSymbol}
-                  placeholder="AAPL"
-                />
-              </div>
-            )}
-
-            <div className="flex flex-col gap-1">
-              <label htmlFor="position-nisa" className="text-xs font-semibold text-text-secondary">
-                NISA区分（任意）
-              </label>
-              <select
-                id="position-nisa"
-                value={nisaType ?? ""}
-                onChange={(e) => setNisaType((e.target.value || null) as NisaType)}
-                className="rounded-button border border-border px-3 py-2 text-sm outline-none focus-visible:border-focus"
-              >
-                <option value="">なし（課税口座）</option>
-                <option value="tsumitate">積立NISA</option>
-                <option value="growth">成長投資枠</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3 md:flex-row md:items-end">
-            <div className="flex flex-col gap-1">
-              <label
-                htmlFor="position-quantity"
-                className="text-xs font-semibold text-text-secondary"
-              >
-                保有数量{isManualMode ? "（口）" : ""}
-              </label>
-              <input
-                id="position-quantity"
-                type="number"
-                min="0"
-                step="any"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                placeholder={isManualMode ? "53950" : "10"}
-                className="w-36 rounded-button border border-border px-3 py-2 text-sm outline-none focus-visible:border-focus"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label htmlFor="position-cost" className="text-xs font-semibold text-text-secondary">
-                平均取得価額{isManualMode ? "（1万口あたり・任意）" : "（任意）"}
-              </label>
-              <input
-                id="position-cost"
-                type="number"
-                min="0"
-                step="any"
-                value={avgCost}
-                onChange={(e) => setAvgCost(e.target.value)}
-                placeholder={isManualMode ? "44022.24" : "150.00"}
-                className="w-40 rounded-button border border-border px-3 py-2 text-sm outline-none focus-visible:border-focus"
-              />
-            </div>
-            {isManualMode ? (
-              <div className="flex flex-col gap-1">
-                <label
-                  htmlFor="position-unit-price"
-                  className="text-xs font-semibold text-text-secondary"
-                >
-                  基準価額（1万口あたり）
-                </label>
-                <input
-                  id="position-unit-price"
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={manualUnitPrice}
-                  onChange={(e) => setManualUnitPrice(e.target.value)}
-                  placeholder="60489"
-                  className="w-40 rounded-button border border-border px-3 py-2 text-sm outline-none focus-visible:border-focus"
-                />
-              </div>
-            ) : null}
-            <button
-              type="submit"
-              disabled={addMutation.isPending}
-              className="rounded-button bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-hover disabled:opacity-60"
-            >
-              {addMutation.isPending ? "追加中..." : "追加"}
-            </button>
-          </div>
-        </form>
-        {formError ? <p className="mt-2 text-xs text-danger">{formError}</p> : null}
-        <p className="mt-2 text-xs text-text-muted">
-          手入力による記録です。証券口座とは連携していません（概算値）。投資信託はYahoo
-          Financeにシンボルが無いため、基準価額を手入力で更新してください。
+      {usdExcluded ? (
+        <p role="status" className="rounded-button border border-border bg-surface px-3 py-2 text-xs text-text-secondary">
+          為替レートを取得できなかったため、USD建ての保有は円換算の合計・構成比に含めていません。
         </p>
-      </Modal>
+      ) : null}
 
-      {isLoading ? null : filtered.length === 0 ? (
+      {isLoading ? null : rows.length === 0 ? (
         <EmptyState
           icon={Briefcase}
           title="保有銘柄がまだ登録されていません"
-          description="上のフォームから銘柄コード・保有数量を入力して追加してください"
+          description="「＋ 保有を追加」から銘柄コード・保有数量を入力して追加してください"
         />
       ) : (
-        <>
-          <div className="hidden overflow-x-auto rounded-card border border-border bg-surface md:block">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs font-semibold text-text-muted">
-                  <th scope="col" className="px-4 py-3">
-                    銘柄
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    資産クラス / 口座
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    保有数量
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    株価 / 基準価額
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    前営業日比
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    評価額
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    評価損益
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    操作
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((p) => (
-                  <tr key={p.id} className="border-t border-border hover:bg-surface-subtle">
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/stocks/${encodeURIComponent(p.providerSymbol)}`}
-                        className="inline-block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
-                      >
-                        <span className="block font-semibold text-text-primary hover:text-primary">
-                          {p.name}
-                        </span>
-                        <span className="block text-xs text-text-muted">
-                          {p.isManual
-                            ? "投資信託（手入力）"
-                            : `${p.displaySymbol} · ${p.exchange ?? "—"}`}
-                        </span>
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1">
-                        <AssetClassBadge assetClass={p.assetClass} />
-                        {p.nisaType ? (
-                          <span className="text-[11px] font-semibold text-primary">
-                            {NISA_LABEL[p.nisaType]}
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 tabular-nums">
-                      {p.quantity.toLocaleString()}
-                      {p.instrumentType === "fund" ? "口" : "株"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <CurrencyValue value={p.displayPrice} currency={p.currency} kind="price" />
-                      {p.assetClass === "fund" ? (
-                        <span className="block text-[11px] text-text-muted">1万口あたり</span>
-                      ) : null}
-                    </td>
-                    <td className="px-4 py-3">
-                      <PercentChange amount={p.change} percent={p.changePercent} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <CurrencyValue value={p.marketValue} currency={p.currency} />
-                    </td>
-                    <td className="px-4 py-3">
-                      {p.unrealizedPnl === null ? (
-                        <span className="text-text-muted">—</span>
-                      ) : (
-                        <PercentChange amount={p.unrealizedPnl} percent={p.unrealizedPnlPercent} kind="amount" currency={p.currency} />
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => removeMutation.mutate(p.id)}
-                        aria-label={`${p.name}を削除`}
-                        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm text-text-muted hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex flex-col gap-3 md:hidden">
-            {filtered.map((p) => (
-              <div
-                key={p.id}
-                className="relative flex flex-col gap-2 rounded-card border border-border bg-surface p-4 hover:bg-surface-subtle"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <Link
-                      href={`/stocks/${encodeURIComponent(p.providerSymbol)}`}
-                      className="rounded-sm after:absolute after:inset-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
-                    >
-                      <span className="block truncate font-semibold text-text-primary">
-                        {p.name}
-                      </span>
-                      <span className="block truncate text-xs text-text-muted">
-                        {p.isManual
-                          ? "投資信託（手入力）"
-                          : `${p.displaySymbol} · ${p.exchange ?? "—"}`}
-                      </span>
-                    </Link>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeMutation.mutate(p.id)}
-                    aria-label={`${p.name}を削除`}
-                    className="relative z-10 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-sm text-text-muted hover:bg-danger-soft hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
-                  >
-                    <Trash2 className="h-4 w-4" aria-hidden />
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <AssetClassBadge assetClass={p.assetClass} />
-                  {p.nisaType ? (
-                    <span className="text-[11px] font-semibold text-primary">
-                      {NISA_LABEL[p.nisaType]}
-                    </span>
-                  ) : null}
-                  <span className="text-xs text-text-muted">
-                    {p.quantity.toLocaleString()}
-                    {p.instrumentType === "fund" ? "口" : "株"}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <p className="text-[11px] text-text-muted">
-                      {p.assetClass === "fund" ? "基準価額（1万口あたり）" : "株価"}
-                    </p>
-                    <CurrencyValue value={p.displayPrice} currency={p.currency} kind="price" />
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-text-muted">前営業日比</p>
-                    <PercentChange amount={p.change} percent={p.changePercent} />
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-text-muted">評価額</p>
-                    <CurrencyValue value={p.marketValue} currency={p.currency} />
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-text-muted">評価損益</p>
-                    {p.unrealizedPnl === null ? (
-                      <span className="text-text-muted">—</span>
-                    ) : (
-                      <PercentChange amount={p.unrealizedPnl} percent={p.unrealizedPnlPercent} kind="amount" currency={p.currency} />
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
+        <HoldingsGroups rows={rows} fx={fx} onEdit={setEditing} onDelete={setDeleting} />
       )}
+
+      <AddPositionDialog open={addOpen} onClose={() => setAddOpen(false)} />
+      <EditPositionDialog position={editing} onClose={() => setEditing(null)} />
+      <DeletePositionDialog position={deleting} onClose={() => setDeleting(null)} />
+      <FundNavDialog
+        open={navOpen}
+        onClose={() => setNavOpen(false)}
+        positions={evaluated}
+        staleFundIds={staleFundIds}
+      />
     </div>
   );
 }

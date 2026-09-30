@@ -8,6 +8,7 @@ import type { PositionApiItem } from "@/features/portfolio/types";
 
 const base: PositionApiItem = {
   id: "p1",
+  instrumentId: "i1",
   quantity: 10,
   avgCost: 100,
   nisaType: null,

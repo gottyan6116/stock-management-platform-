@@ -4,6 +4,7 @@ import {
   formatDateTime,
   formatDateTimeCompact,
   formatPrice,
+  todayJst,
 } from "@/lib/utils/format";
 
 describe("formatCurrency (0-4: 円は整数表示)", () => {
@@ -56,5 +57,12 @@ describe("formatDateTime (0-5: すべてJSTで表示しJSTを明記)", () => {
 
   it("offers a compact month/day form for narrow screens", () => {
     expect(formatDateTimeCompact("2026-09-29T03:04:00Z")).toBe("09/29 12:04");
+  });
+});
+
+describe("todayJst", () => {
+  it("returns the Japan calendar date even when it is still the previous day in UTC", () => {
+    expect(todayJst(new Date("2026-09-28T16:30:00Z"))).toBe("2026-09-29");
+    expect(todayJst(new Date("2026-09-29T03:04:00Z"))).toBe("2026-09-29");
   });
 });

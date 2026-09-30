@@ -5,6 +5,7 @@ export type NisaType = "tsumitate" | "growth" | null;
 
 export interface PositionApiItem {
   id: string;
+  instrumentId: string;
   quantity: number;
   avgCost: number | null;
   nisaType: NisaType;
