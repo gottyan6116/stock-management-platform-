@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/app-shell/PageHeader";
-import { FavoritesDashboard } from "@/components/favorites/FavoritesDashboard";
+import { CandidatesDashboard } from "@/components/candidates/CandidatesDashboard";
 import { getNavLabel } from "@/config/navigation";
 
 export default function CandidatesPage() {
@@ -9,7 +9,7 @@ export default function CandidatesPage() {
         title={getNavLabel("/candidates")}
         description="個別株は「オルカンを買い増すより良いか」で判断し、1年後・3年後に答え合わせする"
       />
-      <FavoritesDashboard />
+      <CandidatesDashboard />
     </div>
   );
 }

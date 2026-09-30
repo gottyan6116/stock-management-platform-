@@ -115,6 +115,17 @@ export function mapYahooQuoteToInstrumentInfo(quote: YahooQuoteLike): Instrument
   };
 }
 
+/**
+ * 配当利回り（%）。Yahooの dividendYield は既に「%」（3.83 = 3.83%）だが、
+ * trailingAnnualDividendYield は小数（0.038 = 3.8%）で単位が違うため、フォールバック時は100倍する。
+ */
+function toDividendYieldPercent(quote: YahooQuoteLike): number | null {
+  const percent = toNullableNumber(quote.dividendYield);
+  if (percent !== null) return percent;
+  const fraction = toNullableNumber(quote.trailingAnnualDividendYield);
+  return fraction === null ? null : fraction * 100;
+}
+
 function toNullableNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -139,7 +150,7 @@ export function mapYahooQuoteToSnapshot(quote: YahooQuoteLike): QuoteSnapshot {
     previousClose: toNullableNumber(quote.regularMarketPreviousClose),
     change: toNullableNumber(quote.regularMarketChange),
     changePercent: toNullableNumber(quote.regularMarketChangePercent),
-    dividendYield: toNullableNumber(quote.dividendYield ?? quote.trailingAnnualDividendYield),
+    dividendYield: toDividendYieldPercent(quote),
     marketCap: toNullableNumber(quote.marketCap),
     trailingPE: toNullableNumber(quote.trailingPE),
     forwardPE: toNullableNumber(quote.forwardPE),

@@ -21,6 +21,7 @@ import { CurrencyValue } from "@/components/tables/CurrencyValue";
 import { FavoriteToggle } from "@/components/search/FavoriteToggle";
 import { EvidenceCoveragePanel } from "@/components/research/EvidenceCoveragePanel";
 import { InstrumentDetailTabs, type InstrumentDetailTab } from "@/components/research/InstrumentDetailTabs";
+import { DecisionSheet } from "@/components/candidates/DecisionSheet";
 import { ResearchOutlookPanel } from "@/components/research/ResearchOutlookPanel";
 import { ResearchSection } from "@/components/research/ResearchSection";
 import { AnalyticsPanel } from "@/components/ui/AnalyticsPanel";
@@ -48,7 +49,13 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default async function StockDetailPage({ params }: { params: { symbol: string } }) {
+export default async function StockDetailPage({
+  params,
+  searchParams,
+}: {
+  params: { symbol: string };
+  searchParams?: { tab?: string };
+}) {
   const rawSymbol = decodeURIComponent(params.symbol);
   const supabase = createClient();
 
@@ -360,6 +367,15 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
     .map((id) => stockTabDefs[id])
     .filter((tab): tab is InstrumentDetailTab => tab !== undefined);
 
+  // 判断シートは個別株の評価ツール。DBに登録済みの銘柄（候補・保有）なら常に「概要」の次に出す。
+  if (existingDbInstrument) {
+    stockTabs.splice(1, 0, {
+      id: "decision",
+      label: "判断シート",
+      content: <DecisionSheet instrumentId={existingDbInstrument.id} />,
+    });
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
@@ -382,7 +398,7 @@ export default async function StockDetailPage({ params }: { params: { symbol: st
         <p className="text-xs text-text-muted">価格基準日 {formatDate(quote?.priceDate ?? null)}</p>
       </div>
 
-      <InstrumentDetailTabs tabs={stockTabs} />
+      <InstrumentDetailTabs tabs={stockTabs} initialTabId={searchParams?.tab} />
     </div>
   );
 }

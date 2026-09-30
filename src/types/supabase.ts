@@ -86,12 +86,14 @@ export interface Database {
           id: string;
           user_id: string;
           instrument_id: string;
+          status: "unevaluated" | "considering" | "purchased" | "passed";
           created_at: string;
         };
         Insert: {
           id?: string;
           user_id: string;
           instrument_id: string;
+          status?: "unevaluated" | "considering" | "purchased" | "passed";
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["favorites"]["Row"]>;
@@ -350,6 +352,68 @@ export interface Database {
           Pick<Database["public"]["Tables"]["portfolio_snapshots"]["Row"], "user_id" | "snapshot_date" | "total_value_jpy">;
         Update: Partial<Database["public"]["Tables"]["portfolio_snapshots"]["Row"]>;
         Relationships: [];
+      };
+      user_settings: {
+        Row: {
+          user_id: string;
+          benchmark_expected_return: number | null;
+          benchmark_instrument_id: string | null;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["user_settings"]["Row"]> &
+          Pick<Database["public"]["Tables"]["user_settings"]["Row"], "user_id">;
+        Update: Partial<Database["public"]["Tables"]["user_settings"]["Row"]>;
+        Relationships: [];
+      };
+      decision_sheets: {
+        Row: {
+          user_id: string;
+          instrument_id: string;
+          thesis_why: string;
+          thesis_wrong: string;
+          scenarios: Record<string, unknown>;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["decision_sheets"]["Row"]> &
+          Pick<Database["public"]["Tables"]["decision_sheets"]["Row"], "user_id" | "instrument_id">;
+        Update: Partial<Database["public"]["Tables"]["decision_sheets"]["Row"]>;
+        Relationships: [];
+      };
+      decision_records: {
+        Row: {
+          id: string;
+          user_id: string;
+          instrument_id: string;
+          decision: "buy" | "pass";
+          decided_on: string;
+          price: number;
+          currency: "JPY" | "USD";
+          dividend_yield: number | null;
+          current_per: number | null;
+          thesis_why: string;
+          thesis_wrong: string;
+          scenarios: Record<string, unknown>;
+          hurdle_return: number | null;
+          benchmark_instrument_id: string | null;
+          benchmark_nav: number | null;
+          benchmark_nav_date: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["decision_records"]["Row"]> &
+          Pick<
+            Database["public"]["Tables"]["decision_records"]["Row"],
+            "user_id" | "instrument_id" | "decision" | "decided_on" | "price" | "currency"
+          >;
+        Update: Partial<Database["public"]["Tables"]["decision_records"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "decision_records_instrument_id_fkey";
+            columns: ["instrument_id"];
+            isOneToOne: false;
+            referencedRelation: "instruments";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       research_sources: {
         Row: {
