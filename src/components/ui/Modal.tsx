@@ -12,11 +12,14 @@ export function Modal({
   onClose,
   title,
   children,
+  wide = false,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
+  /** 表を載せるダイアログ用。 */
+  wide?: boolean;
 }) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -54,7 +57,7 @@ export function Modal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-y-auto rounded-card border border-border bg-surface p-5 outline-none"
+        className={`flex max-h-[90vh] w-full ${wide ? "max-w-4xl" : "max-w-2xl"} flex-col overflow-y-auto rounded-card border border-border bg-surface p-5 outline-none`}
       >
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 id={titleId} className="text-lg font-bold text-text-primary">

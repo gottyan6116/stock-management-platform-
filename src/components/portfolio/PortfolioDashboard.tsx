@@ -26,6 +26,7 @@ import { DeletePositionDialog } from "./DeletePositionDialog";
 import { EditPositionDialog } from "./EditPositionDialog";
 import { FundNavDialog } from "./FundNavDialog";
 import { HoldingsGroups } from "./HoldingsGroups";
+import { ImportCsvDialog } from "./ImportCsvDialog";
 
 type AccountFilter = "all" | AccountKey;
 
@@ -37,6 +38,7 @@ export function PortfolioDashboard() {
   const [accountFilter, setAccountFilter] = useState<AccountFilter>("all");
   const [addOpen, setAddOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<EvaluatedPosition | null>(null);
   const [deleting, setDeleting] = useState<EvaluatedPosition | null>(null);
 
@@ -71,6 +73,13 @@ export function PortfolioDashboard() {
         }
         actions={
           <>
+            <button
+              type="button"
+              onClick={() => setImportOpen(true)}
+              className="inline-flex min-h-11 items-center rounded-button border border-border bg-surface px-4 text-sm font-semibold text-text-primary hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            >
+              楽天証券CSVを取込
+            </button>
             {hasFunds ? (
               <button
                 type="button"
@@ -129,6 +138,7 @@ export function PortfolioDashboard() {
       )}
 
       <AddPositionDialog open={addOpen} onClose={() => setAddOpen(false)} />
+      <ImportCsvDialog open={importOpen} onClose={() => setImportOpen(false)} />
       <EditPositionDialog position={editing} onClose={() => setEditing(null)} />
       <DeletePositionDialog position={deleting} onClose={() => setDeleting(null)} />
       <FundNavDialog
