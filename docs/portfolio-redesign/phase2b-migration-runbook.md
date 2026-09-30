@@ -67,3 +67,32 @@ drop table public.manual_fund_prices_backup_20260930;
 Vercel の Project → Settings → Environment Variables に `CRON_SECRET`（任意の長いランダム文字列）を追加します。
 Vercel Cron は毎日 07:00 UTC（日本時間 16:00）に `/api/cron/snapshot` を呼び、`Authorization: Bearer <CRON_SECRET>` を付けます。
 未設定の場合、cron は 401 で拒否されます（ホームを開いたときの記録は cron と無関係に動きます）。
+
+## 8. マイグレーション 0010（候補・検証）
+
+`supabase/migrations/0010_candidates_decisions.sql`。お気に入りに「状態」列を足し、設定・判断シート・判断記録の3テーブルを追加します。
+**既存のお気に入りは削除せず**、状態を「未評価」で始めます（すでに保有している銘柄だけ「購入済」）。
+
+適用前のバックアップ（SQL Editor）:
+
+```sql
+create table public.favorites_backup_20261001 as select * from public.favorites;
+select (select count(*) from public.favorites) as now, (select count(*) from public.favorites_backup_20261001) as backup;
+```
+
+適用後の確認:
+
+```sql
+select status, count(*) from public.favorites group by status;
+select to_regclass('public.user_settings'), to_regclass('public.decision_sheets'), to_regclass('public.decision_records');
+```
+
+ロールバック（追加分のみ削除。favorites の既存行は残る）:
+
+```sql
+drop table if exists public.decision_records;
+drop table if exists public.decision_sheets;
+drop table if exists public.user_settings;
+drop policy if exists "users can update own favorites" on public.favorites;
+alter table public.favorites drop column if exists status;
+```

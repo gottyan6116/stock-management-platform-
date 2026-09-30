@@ -3,9 +3,12 @@ import type { Database } from "@/types/supabase";
 
 type InstrumentRow = Database["public"]["Tables"]["instruments"]["Row"];
 
+export type CandidateStatus = Database["public"]["Tables"]["favorites"]["Row"]["status"];
+
 export interface FavoriteWithInstrument {
   id: string;
   createdAt: string;
+  status: CandidateStatus;
   instrument: InstrumentRow;
 }
 
@@ -19,7 +22,7 @@ export async function listFavorites(
 ): Promise<FavoriteWithInstrument[]> {
   const { data, error } = await supabase
     .from("favorites")
-    .select("id, created_at, instrument_id, instruments(*)")
+    .select("id, created_at, status, instrument_id, instruments(*)")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
@@ -30,6 +33,7 @@ export async function listFavorites(
     .map((row) => ({
       id: row.id,
       createdAt: row.created_at,
+      status: row.status,
       instrument: row.instruments,
     }));
 }
@@ -61,4 +65,21 @@ export async function removeFavorite(
     .eq("instrument_id", instrumentId);
 
   if (error) throw error;
+}
+
+/** 候補の状態を更新する。対象が自分のお気に入りでなければ false（RLSとuser_id絞り込みの両方で保護）。 */
+export async function updateFavoriteStatus(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  instrumentId: string,
+  status: CandidateStatus
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("favorites")
+    .update({ status })
+    .eq("user_id", userId)
+    .eq("instrument_id", instrumentId)
+    .select("id");
+  if (error) throw error;
+  return (data ?? []).length > 0;
 }

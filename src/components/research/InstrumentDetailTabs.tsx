@@ -8,10 +8,19 @@ export interface InstrumentDetailTab {
   content: ReactNode;
 }
 
-export function InstrumentDetailTabs({ tabs }: { tabs: readonly InstrumentDetailTab[] }) {
+export function InstrumentDetailTabs({
+  tabs,
+  initialTabId,
+}: {
+  tabs: readonly InstrumentDetailTab[];
+  /** 存在するタブIDならそのタブを最初に開く（例: 候補一覧から判断シートへ直接移動）。 */
+  initialTabId?: string;
+}) {
   const prefix = useId();
   const tabRefs = useRef(new Map<string, HTMLButtonElement>());
-  const [activeId, setActiveId] = useState(tabs[0]?.id ?? "");
+  const [activeId, setActiveId] = useState(
+    initialTabId && tabs.some((tab) => tab.id === initialTabId) ? initialTabId : (tabs[0]?.id ?? "")
+  );
   const activeIndex = Math.max(
     0,
     tabs.findIndex((tab) => tab.id === activeId)

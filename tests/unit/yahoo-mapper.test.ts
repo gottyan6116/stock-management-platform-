@@ -80,6 +80,21 @@ describe("mapYahooQuoteToSnapshot", () => {
     expect(snapshot.marketCap).toBeNull();
   });
 
+  it("配当利回りは%で統一する（dividendYieldは%、trailingAnnualDividendYieldは小数なので100倍する）", () => {
+    expect(mapYahooQuoteToSnapshot({ symbol: "HPQ", currency: "USD", dividendYield: 3.83 }).dividendYield).toBe(3.83);
+    const fallback = mapYahooQuoteToSnapshot({
+      symbol: "HPQ",
+      currency: "USD",
+      trailingAnnualDividendYield: 0.037962962,
+    }).dividendYield;
+    expect(fallback).toBeCloseTo(3.7962962, 6);
+    // 両方あるときは%表記の値を優先する。
+    expect(
+      mapYahooQuoteToSnapshot({ symbol: "HPQ", currency: "USD", dividendYield: 3.83, trailingAnnualDividendYield: 0.0379 })
+        .dividendYield
+    ).toBe(3.83);
+  });
+
   it("regularMarketTimeを日付文字列(YYYY-MM-DD)に変換する", () => {
     const snapshot = mapYahooQuoteToSnapshot({
       symbol: "AAPL",
