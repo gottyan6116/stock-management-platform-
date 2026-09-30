@@ -54,6 +54,7 @@ function positionFor(instrument: Instrument, price: ReturnType<typeof stockPrice
     quantity,
     avgCost: null,
     nisaType: null,
+    nisaLegacy: false,
     isManual: instrument.instrumentType === "fund",
     providerSymbol: instrument.providerSymbol,
     displaySymbol: instrument.displaySymbol,

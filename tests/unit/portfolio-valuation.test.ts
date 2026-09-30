@@ -14,6 +14,7 @@ function pos(overrides: Partial<PositionApiItem>): PositionApiItem {
   return {
     id: "p",
     instrumentId: "i",
+    nisaLegacy: false,
     quantity: 1,
     avgCost: null,
     nisaType: null,

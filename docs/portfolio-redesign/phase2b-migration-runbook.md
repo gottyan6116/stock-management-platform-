@@ -56,3 +56,14 @@ drop table public.manual_fund_prices_backup_20260930;
 - 日次スナップショット cron（Vercel Cron → `/api/cron/snapshot`、`CRON_SECRET` で保護）
 - ホームの資産推移チャート（推計期間は破線・注記で区別）
 - NISA 枠カード（年間つみたて/成長、生涯は簿価ベース、旧つみたてNISAは別属性）
+
+## 6. 追加マイグレーション 0009（購入履歴の口数を任意にする）
+
+`supabase/migrations/0009_purchases_quantity_optional.sql`。積立の買付は金額しか分からないことが多いため、口数を必須にしません。
+既存データには影響しない小さな変更です（制約の付け替えのみ）。**NISAの買付記録を使う前に SQL Editor で実行してください。**
+
+## 7. 日次スナップショット用の環境変数
+
+Vercel の Project → Settings → Environment Variables に `CRON_SECRET`（任意の長いランダム文字列）を追加します。
+Vercel Cron は毎日 07:00 UTC（日本時間 16:00）に `/api/cron/snapshot` を呼び、`Authorization: Bearer <CRON_SECRET>` を付けます。
+未設定の場合、cron は 401 で拒否されます（ホームを開いたときの記録は cron と無関係に動きます）。

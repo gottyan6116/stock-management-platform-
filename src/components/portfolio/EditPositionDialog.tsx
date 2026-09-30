@@ -37,6 +37,7 @@ export function EditPositionDialog({
   const [quantity, setQuantity] = useState("");
   const [avgCost, setAvgCost] = useState("");
   const [nisaType, setNisaType] = useState<NisaType>(null);
+  const [legacy, setLegacy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,6 +45,7 @@ export function EditPositionDialog({
     setQuantity(String(position.quantity));
     setAvgCost(toInputCost(position));
     setNisaType(position.nisaType);
+    setLegacy(position.nisaLegacy);
     setError(null);
   }, [position]);
 
@@ -68,7 +70,14 @@ export function EditPositionDialog({
       setError("取得単価は0以上の数で入力してください。");
       return;
     }
-    mutation.mutate({ quantity: q, avgCost: cost, nisaType });
+    // 旧つみたてNISAはつみたて枠だけの属性。口座を変えたら外す。変更が無ければ送らない。
+    const nextLegacy = nisaType === "tsumitate" && legacy;
+    mutation.mutate({
+      quantity: q,
+      avgCost: cost,
+      nisaType,
+      ...(nextLegacy !== position!.nisaLegacy ? { nisaLegacy: nextLegacy } : {}),
+    });
   }
 
   const isFund = position?.assetClass === "fund";
@@ -122,6 +131,17 @@ export function EditPositionDialog({
             <option value="tsumitate">つみたて投資枠</option>
           </select>
         </div>
+        {nisaType === "tsumitate" ? (
+          <label className="flex min-h-11 items-center gap-2 text-sm text-text-primary">
+            <input
+              type="checkbox"
+              checked={legacy}
+              onChange={(e) => setLegacy(e.target.checked)}
+              className="h-4 w-4"
+            />
+            旧つみたてNISA（2023年までの制度）
+          </label>
+        ) : null}
         {error ? (
           <p role="alert" className="text-sm text-danger-text">
             {error}

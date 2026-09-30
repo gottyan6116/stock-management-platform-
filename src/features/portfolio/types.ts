@@ -9,6 +9,8 @@ export interface PositionApiItem {
   quantity: number;
   avgCost: number | null;
   nisaType: NisaType;
+  /** 旧つみたてNISA（2023年までの制度）。新NISAの生涯投資枠には含めない。 */
+  nisaLegacy: boolean;
   isManual: boolean;
   providerSymbol: string;
   displaySymbol: string;

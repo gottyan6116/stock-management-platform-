@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HomeDashboard } from "@/components/home/HomeDashboard";
 
@@ -70,14 +70,23 @@ const fund = {
   changePercent: null,
 };
 
-function mockApis(positions: unknown[], fx: { usdJpy: number; asOf: string } | null) {
+function mockApis(positions: unknown[], fx: { usdJpy: number; asOf: string } | null, snapshots: unknown[] = [], purchases: unknown[] = []) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/api/fx/usdjpy")) return { ok: true, json: async () => ({ data: fx }) };
+      if (url.includes("/api/purchases")) return { ok: true, json: async () => ({ data: purchases }) };
+      if (url.includes("/api/snapshots")) return { ok: true, json: async () => ({ data: snapshots }) };
       return { ok: true, json: async () => ({ data: positions }) };
     })
+  );
+}
+
+function callsTo(path: string, method?: string) {
+  const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+  return fetchMock.mock.calls.filter(
+    ([url, init]) => String(url).includes(path) && (method ? init?.method === method : true)
   );
 }
 
@@ -156,5 +165,64 @@ describe("HomeDashboard (Phase 2)", () => {
 
     expect(await screen.findByRole("link", { name: "保有資産を登録する" })).toHaveAttribute("href", "/portfolio");
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  });
+
+  it("records today's snapshot once when none exists, and never sends amounts from the client", async () => {
+    mockApis([stock], { usdJpy: 150, asOf: "2026-09-29T03:00:00Z" }, []);
+    renderHome();
+    await screen.findByRole("region", { name: "総資産（円換算）" });
+
+    await waitFor(() => expect(callsTo("/api/snapshots", "POST")).toHaveLength(1));
+    expect(callsTo("/api/snapshots", "POST")[0]![1]).toEqual({ method: "POST" });
+  });
+
+  it("does not record again when today's snapshot already exists", async () => {
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
+    mockApis([stock], { usdJpy: 150, asOf: "x" }, [
+      { date: today, totalValueJpy: 1200, totalCostJpy: null, isEstimated: false },
+    ]);
+    renderHome();
+    await screen.findByRole("region", { name: "総資産（円換算）" });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(callsTo("/api/snapshots", "POST")).toHaveLength(0);
+  });
+
+  it("does not record while USD cannot be converted (would store a falsely low total)", async () => {
+    mockApis([stock, usStock], null, []);
+    renderHome();
+    await screen.findByRole("region", { name: "総資産（円換算）" });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(callsTo("/api/snapshots", "POST")).toHaveLength(0);
+  });
+
+  it("asks for purchase records instead of showing 0 yen used when none are recorded this year", async () => {
+    mockApis([stock, fund], { usdJpy: 150, asOf: "x" }, [], []);
+    renderHome();
+
+    const nisa = await screen.findByRole("region", { name: "NISA枠" });
+    expect(within(nisa).getByText(/買付が未記録のため、消化額は表示できません/)).toBeInTheDocument();
+    // 生涯枠は簿価（取得単価×数量）から出せる: 成長=10株×100円、つみたて=100,000口×3円/万口相当
+    expect(within(nisa).getByRole("progressbar", { name: "合計の使用率" })).toBeInTheDocument();
+    expect(within(nisa).getByRole("button", { name: "買付を記録" })).toBeInTheDocument();
+  });
+
+  it("shows annual usage per account and the remaining amount once purchases are recorded", async () => {
+    const year = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" }).slice(0, 4);
+    mockApis([stock, fund], { usdJpy: 150, asOf: "x" }, [], [
+      { id: "a", instrumentId: "i-fund", name: "テストファンド", nisaType: "tsumitate", side: "buy", tradedOn: `${year}-01-05`, quantity: null, amountJpy: 100_000 },
+      { id: "b", instrumentId: "i-stock", name: "トヨタ自動車", nisaType: "growth", side: "buy", tradedOn: `${year}-01-06`, quantity: null, amountJpy: 500_000 },
+    ]);
+    renderHome();
+
+    const nisa = await screen.findByRole("region", { name: "NISA枠" });
+    expect(await within(nisa).findByText("残り ¥1,100,000")).toBeInTheDocument();
+    expect(within(nisa).getByText("残り ¥1,900,000")).toBeInTheDocument();
+  });
+
+  it("hides the NISA card when nothing is held in a NISA account", async () => {
+    mockApis([{ ...stock, nisaType: null }], { usdJpy: 150, asOf: "x" });
+    renderHome();
+    await screen.findByRole("region", { name: "総資産（円換算）" });
+    expect(screen.queryByRole("region", { name: "NISA枠" })).not.toBeInTheDocument();
   });
 });
