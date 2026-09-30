@@ -1,16 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Briefcase } from "lucide-react";
 import { PageHeader } from "@/components/app-shell/PageHeader";
+import { AssetHistoryChart } from "@/components/charts/AssetHistoryChart";
+import { NisaQuotaCard } from "@/components/home/NisaQuotaCard";
 import { Skeleton } from "@/components/feedback/Skeleton";
 import { FundNavDialog } from "@/components/portfolio/FundNavDialog";
 import { SignedAmount } from "@/components/ui/SignedAmount";
 import { getNavLabel } from "@/config/navigation";
 import { fetchPositions, POSITIONS_KEY } from "@/features/portfolio/api";
 import { useUsdJpy } from "@/features/portfolio/fx";
+import { recordTodaySnapshot, SNAPSHOTS_KEY, useSnapshots } from "@/features/portfolio/snapshots";
 import { evaluatePositions } from "@/features/portfolio/summary";
 import {
   allocate,
@@ -51,7 +54,10 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
 
 export function HomeDashboard() {
   const { data = [], isLoading, isError } = useQuery({ queryKey: POSITIONS_KEY, queryFn: fetchPositions });
-  const { data: fx = null } = useUsdJpy();
+  const { data: fx = null, isFetched: fxFetched } = useUsdJpy();
+  const { data: snapshots, isFetched: snapshotsFetched } = useSnapshots();
+  const queryClient = useQueryClient();
+  const recordedRef = useRef(false);
   const [dimension, setDimension] = useState<AllocationDimension>("account");
   const [navOpen, setNavOpen] = useState(false);
 
@@ -59,6 +65,18 @@ export function HomeDashboard() {
   const summary = useMemo(() => summarizePortfolioJpy(evaluated, fx), [evaluated, fx]);
   const slices = useMemo(() => allocate(evaluated, fx, dimension), [evaluated, fx, dimension]);
   const staleFundIds = useMemo(() => listStaleFundIds(evaluated, todayJst()), [evaluated]);
+
+  // 今日の分がまだ無ければ一度だけ記録する（金額はサーバーが計算。cronの実行を待たずに履歴を始める）。
+  const today = todayJst();
+  const hasToday = snapshots?.some((p) => p.date === today) ?? false;
+  const canRecord = summary.totalValueJpy !== null && summary.excludedCount === 0;
+  useEffect(() => {
+    if (recordedRef.current || !snapshotsFetched || !fxFetched || hasToday || !canRecord) return;
+    recordedRef.current = true;
+    recordTodaySnapshot()
+      .then(() => queryClient.invalidateQueries({ queryKey: SNAPSHOTS_KEY }))
+      .catch(() => undefined);
+  }, [snapshotsFetched, fxFetched, hasToday, canRecord, queryClient]);
 
   if (isLoading) {
     return (
@@ -148,6 +166,13 @@ export function HomeDashboard() {
         </div>
       </section>
 
+      <section aria-labelledby="history-heading" className="rounded-card border border-border bg-surface p-5">
+        <h2 id="history-heading" className="text-sm font-bold text-text-primary">
+          資産推移（円換算）
+        </h2>
+        <AssetHistoryChart points={snapshots ?? []} />
+      </section>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <section aria-labelledby="allocation-heading" className="rounded-card border border-border bg-surface p-5">
           <div className="flex items-center justify-between gap-3">
@@ -232,6 +257,8 @@ export function HomeDashboard() {
           )}
         </section>
       </div>
+
+      <NisaQuotaCard positions={evaluated} fx={fx} />
 
       <FundNavDialog open={navOpen} onClose={() => setNavOpen(false)} positions={evaluated} staleFundIds={staleFundIds} />
     </div>

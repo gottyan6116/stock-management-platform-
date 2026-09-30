@@ -52,6 +52,7 @@ export interface Database {
           is_manual: boolean;
           manual_unit_price: number | null;
           manual_price_date: string | null;
+          nisa_legacy: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -60,6 +61,7 @@ export interface Database {
           user_id: string;
           instrument_id: string;
           quantity: number;
+          nisa_legacy?: boolean;
           avg_cost?: number | null;
           nisa_type?: "tsumitate" | "growth" | null;
           is_manual?: boolean;
@@ -303,6 +305,51 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      position_purchases: {
+        Row: {
+          id: string;
+          user_id: string;
+          instrument_id: string;
+          nisa_type: "tsumitate" | "growth" | null;
+          side: "buy" | "sell";
+          traded_on: string;
+          quantity: number | null;
+          amount_jpy: number;
+          source: "manual" | "csv";
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["position_purchases"]["Row"]> &
+          Pick<
+            Database["public"]["Tables"]["position_purchases"]["Row"],
+            "user_id" | "instrument_id" | "traded_on" | "amount_jpy"
+          >;
+        Update: Partial<Database["public"]["Tables"]["position_purchases"]["Row"]>;
+        Relationships: [
+          {
+            foreignKeyName: "position_purchases_instrument_id_fkey";
+            columns: ["instrument_id"];
+            isOneToOne: false;
+            referencedRelation: "instruments";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      portfolio_snapshots: {
+        Row: {
+          user_id: string;
+          snapshot_date: string;
+          total_value_jpy: number;
+          total_cost_jpy: number | null;
+          usd_jpy: number | null;
+          breakdown: Record<string, Record<string, number>>;
+          is_estimated: boolean;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["portfolio_snapshots"]["Row"]> &
+          Pick<Database["public"]["Tables"]["portfolio_snapshots"]["Row"], "user_id" | "snapshot_date" | "total_value_jpy">;
+        Update: Partial<Database["public"]["Tables"]["portfolio_snapshots"]["Row"]>;
+        Relationships: [];
       };
       research_sources: {
         Row: {

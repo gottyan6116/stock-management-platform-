@@ -9,6 +9,7 @@ export interface PositionWithInstrument {
   quantity: number;
   avgCost: number | null;
   nisaType: NisaType;
+  nisaLegacy: boolean;
   isManual: boolean;
   manualUnitPrice: number | null;
   manualPriceDate: string | null;
@@ -23,7 +24,7 @@ export async function listPositions(
   const { data, error } = await supabase
     .from("positions")
     .select(
-      "id, quantity, avg_cost, nisa_type, is_manual, manual_unit_price, manual_price_date, created_at, instrument_id, instruments(*)"
+      "id, quantity, avg_cost, nisa_type, nisa_legacy, is_manual, manual_unit_price, manual_price_date, created_at, instrument_id, instruments(*)"
     )
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
@@ -37,6 +38,7 @@ export async function listPositions(
       quantity: row.quantity,
       avgCost: row.avg_cost,
       nisaType: row.nisa_type,
+      nisaLegacy: row.nisa_legacy,
       isManual: row.is_manual,
       manualUnitPrice: row.manual_unit_price,
       manualPriceDate: row.manual_price_date,
@@ -93,6 +95,7 @@ export interface PositionPatch {
   quantity?: number;
   avgCost?: number | null;
   nisaType?: NisaType;
+  nisaLegacy?: boolean;
 }
 
 /** 数量・取得単価・口座の編集。対象が自分の保有でなければ null（RLSとuser_id絞り込みの両方で保護）。 */
@@ -106,6 +109,7 @@ export async function updatePosition(
   if (patch.quantity !== undefined) update.quantity = patch.quantity;
   if (patch.avgCost !== undefined) update.avg_cost = patch.avgCost;
   if (patch.nisaType !== undefined) update.nisa_type = patch.nisaType;
+  if (patch.nisaLegacy !== undefined) update.nisa_legacy = patch.nisaLegacy;
 
   const { data, error } = await supabase
     .from("positions")

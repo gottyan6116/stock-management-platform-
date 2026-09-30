@@ -25,6 +25,7 @@ const patchSchema = z
     quantity: z.coerce.number().positive("数量は正の数で入力してください。").optional(),
     avgCost: z.coerce.number().nonnegative("取得単価は0以上で入力してください。").nullable().optional(),
     nisaType: z.enum(["tsumitate", "growth"]).nullable().optional(),
+    nisaLegacy: z.boolean().optional(),
   })
   .refine((data) => Object.values(data).some((value) => value !== undefined), {
     message: "変更する項目がありません。",

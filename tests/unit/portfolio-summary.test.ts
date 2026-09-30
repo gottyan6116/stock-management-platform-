@@ -12,6 +12,7 @@ const base: PositionApiItem = {
   quantity: 10,
   avgCost: 100,
   nisaType: null,
+  nisaLegacy: false,
   isManual: false,
   providerSymbol: "7203.T",
   displaySymbol: "7203",
